@@ -126,6 +126,23 @@ label.f{display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:600}
 .ing .ing-cat{grid-column:1 / -1}
 .ing input,.ing select{padding:8px}
 .steps{display:flex;gap:6px;margin:0 0 10px;flex-wrap:wrap}
+#print{display:none}
+@media print{
+  @page{size:A4 landscape;margin:10mm}
+  body{background:#fff!important;padding:0!important;color:#000}
+  body > *:not(#print){display:none!important}
+  #print{display:block}
+  #print h1{font-size:22pt;margin:0 0 4mm}
+  #print table{width:100%;border-collapse:collapse;table-layout:fixed}
+  #print th{font-size:10pt;text-transform:uppercase;letter-spacing:.06em;color:#444;padding:1.5mm;border:0;text-align:left}
+  #print td{border:.3mm solid #888;vertical-align:top;padding:1.5mm 2mm;text-align:left;font-variant-numeric:normal}
+  #print td b{display:block;font-size:10pt;color:#555}
+  #print td span{display:block;font-size:13pt;font-weight:600;line-height:1.2;margin-top:1mm;overflow-wrap:anywhere}
+  #print td.away{background:#eee;color:#777}
+  #print td.away span{font-weight:400;font-style:italic}
+  #print td.empty{border:0}
+  #print p{font-size:9pt;color:#777;margin:3mm 0 0}
+}
 @media (max-width:380px){.round{width:38px;height:38px}.qty{min-width:48px}}
 </style>
 </head>
@@ -144,6 +161,7 @@ label.f{display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:600}
   <button data-tab="mer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>Mer</button>
 </nav>
 
+<div id="print"></div>
 <dialog id="dlg"></dialog>
 <dialog id="ask"></dialog>
 <div id="toast"><span id="toast-msg"></span><button id="toast-undo">Angre</button></div>
@@ -599,11 +617,20 @@ function viewPlan() {
     ${cal}
     <section class="card"><h2>Middager i ${monthName(key).split(' ')[0]}<span>${open > 0 ? open + ' dager uten middag' : ''}</span></h2>
       ${summary || '<div class="row sub">Ingen middager valgt ennå.</div>'}
+    </section>
+    <section class="card"><h2>Del med resten av huset</h2>
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn" id="print-cal">Skriv ut</button>
+        <button class="btn" id="image-cal">Del som bilde</button>
+      </div>
+      <div class="row sub" style="border-top:0;padding-top:0">Skriv ut kalenderen for ${monthName(key).split(' ')[0]} og heng den på kjøleskapet, eller send den som bilde til resten av familien.</div>
     </section>`;
 
   $('#prev').onclick = () => { planMonth = shiftMonth(planMonth, -1); render(); };
   $('#nextm').onclick = () => { planMonth = shiftMonth(planMonth, 1); render(); };
   $('#to-list').onclick = () => go('liste');
+  $('#print-cal').onclick = () => printCalendar(key);
+  $('#image-cal').onclick = () => shareCalendarImage(key);
   document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { planMode = b.dataset.mode; render(); });
   document.querySelectorAll('[data-day]').forEach(b => b.onclick = () => {
     const d = +b.dataset.day;
@@ -614,6 +641,121 @@ function viewPlan() {
       render();
     } else openDay(d);
   });
+}
+
+/* ---------- Utskrift og bilde av kalenderen ---------- */
+// Dagene i måneden som uker (mandag først), tomme plasser er null
+function calWeeks(key) {
+  const offset = (dayDate(key, 1).getDay() + 6) % 7, n = daysIn(key);
+  const cells = Array(offset).fill(null).concat(Array.from({ length: n }, (_, k) => k + 1));
+  while (cells.length % 7) cells.push(null);
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
+}
+function dayLabel(key, d) {
+  const day = getDay(key, d), dn = day.dinner && dinner(day.dinner);
+  return { away: !!day.away, text: day.away ? 'Borte' : dn ? dn.name : day.note || '' };
+}
+const WEEKDAYS_LONG = ['Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lørdag', 'Søndag'];
+
+function printCalendar(key) {
+  const weeks = calWeeks(key);
+  const rowH = Math.floor(160 / weeks.length);
+  $('#print').innerHTML = `<h1>Middager i ${monthName(key)}</h1>
+    <table><thead><tr>${WEEKDAYS_LONG.map(w => `<th>${w}</th>`).join('')}</tr></thead><tbody>
+    ${weeks.map(w => `<tr style="height:${rowH}mm">${w.map(d => {
+      if (!d) return '<td class="empty"></td>';
+      const l = dayLabel(key, d);
+      return `<td class="${l.away ? 'away' : ''}"><b>${d}</b><span>${esc(l.text)}</span></td>`;
+    }).join('')}</tr>`).join('')}
+    </tbody></table>
+    <p>Laget med Matplanlegging</p>`;
+  window.print();
+}
+
+function wrapText(ctx, text, maxW, maxLines) {
+  const words = text.split(/\s+/).filter(Boolean), lines = [];
+  let line = '';
+  const push = l => { lines.push(l); };
+  for (let w of words) {
+    // Del opp ord som er bredere enn ruten
+    while (ctx.measureText(w).width > maxW) {
+      let k = w.length - 1;
+      while (k > 1 && ctx.measureText(w.slice(0, k) + '-').width > maxW) k--;
+      if (line) { push(line); line = ''; }
+      push(w.slice(0, k) + '-');
+      w = w.slice(k);
+    }
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width <= maxW) line = test;
+    else { push(line); line = w; }
+  }
+  if (line) push(line);
+  if (lines.length > maxLines) {
+    const cut = lines.slice(0, maxLines);
+    let last = cut[maxLines - 1];
+    while (last && ctx.measureText(last + '…').width > maxW) last = last.slice(0, -1);
+    cut[maxLines - 1] = last + '…';
+    return cut;
+  }
+  return lines;
+}
+
+function drawCalendar(key) {
+  const weeks = calWeeks(key);
+  const W = 1600, pad = 48, headH = 110, wdH = 44, cellW = (W - pad * 2) / 7, cellH = 190;
+  const H = pad + headH + wdH + cellH * weeks.length + 70;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  const font = (w, px) => `${w} ${px}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+  ctx.fillStyle = '#f6f4ee'; ctx.fillRect(0, 0, W, H);
+  // Tittel
+  const title = `Middager i ${monthName(key)}`;
+  ctx.fillStyle = '#1f2a22'; ctx.font = font(700, 56); ctx.textBaseline = 'top';
+  ctx.fillText(title.charAt(0).toUpperCase() + title.slice(1), pad, pad);
+  // Ukedager
+  ctx.font = font(600, 22); ctx.fillStyle = '#6b756d';
+  WEEKDAYS_LONG.forEach((w, i) => ctx.fillText(w.toUpperCase(), pad + i * cellW + 12, pad + headH));
+  const top = pad + headH + wdH;
+  const today = todayStart().getTime();
+  weeks.forEach((w, r) => w.forEach((d, i) => {
+    if (!d) return;
+    const x = pad + i * cellW, y = top + r * cellH, l = dayLabel(key, d);
+    ctx.fillStyle = l.away ? '#e9e6dc' : l.text ? '#e7efe8' : '#ffffff';
+    ctx.fillRect(x + 3, y + 3, cellW - 6, cellH - 6);
+    if (dayDate(key, d).getTime() === today) { ctx.strokeStyle = '#3f6b4a'; ctx.lineWidth = 4; ctx.strokeRect(x + 5, y + 5, cellW - 10, cellH - 10); }
+    else { ctx.strokeStyle = '#e3e0d6'; ctx.lineWidth = 2; ctx.strokeRect(x + 3, y + 3, cellW - 6, cellH - 6); }
+    ctx.fillStyle = '#1f2a22'; ctx.font = font(700, 28);
+    ctx.fillText(String(d), x + 16, y + 14);
+    if (l.text) {
+      ctx.font = l.away ? font('italic 400', 26) : font(600, 28);
+      ctx.fillStyle = l.away ? '#6b756d' : '#2f5638';
+      wrapText(ctx, l.text, cellW - 32, 4).forEach((line, k) => ctx.fillText(line, x + 16, y + 58 + k * 32));
+    }
+  }));
+  ctx.fillStyle = '#6b756d'; ctx.font = font(400, 22);
+  ctx.fillText('Laget med Matplanlegging', pad, H - 50);
+  return c;
+}
+
+async function shareCalendarImage(key) {
+  const blob = await new Promise(res => drawCalendar(key).toBlob(res, 'image/png'));
+  const name = `middager-${key}.png`;
+  try {
+    const file = new File([blob], name, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: `Middager i ${monthName(key)}` });
+      return;
+    }
+  } catch (e) { if (e.name === 'AbortError') return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast('Bildet er lagret i Nedlastinger');
 }
 
 function openDay(d) {
