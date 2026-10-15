@@ -1,4 +1,4 @@
-const CACHE = 'matlager-v4';
+const CACHE = 'matlager-v5';
 const APP_SHELL = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
