@@ -40,6 +40,7 @@ nav button.on{color:var(--accent);font-weight:600}
 .row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
 .grow{flex:1;min-width:0}
+.grp{padding:7px 14px;font-size:13px;font-weight:700;color:var(--accent);background:var(--soft);border-top:1px solid var(--line)}
 .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:none;border:0;padding:0;text-align:left;cursor:pointer;width:100%;display:block}
 .sub{font-size:13px;color:var(--muted)}
 .bar{height:5px;background:var(--bar);border-radius:3px;margin-top:5px;overflow:hidden}
@@ -128,8 +129,11 @@ const KEY = 'matlager.v1';
 const CATS = [
   { id: 'torr',    name: 'Tørrvarer',          mode: 'mnd' },
   { id: 'herm',    name: 'Hermetikk og glass', mode: 'mnd' },
-  { id: 'frys',    name: 'Fryser',             mode: 'mnd' },
-  { id: 'kjol',    name: 'Meieri og kjøl',     mode: 'behov' },
+  { id: 'kjott',   name: 'Kjøtt og kylling',   mode: 'mnd' },
+  { id: 'fisk',    name: 'Fisk og sjømat',     mode: 'mnd' },
+  { id: 'brod',    name: 'Brød og bakst',      mode: 'mnd' },
+  { id: 'frys',    name: 'Annen frossenmat',   mode: 'mnd' },
+  { id: 'kjol',    name: 'Meieri og egg',      mode: 'behov' },
   { id: 'frukt',   name: 'Frukt og grønt',     mode: 'behov' },
   { id: 'krydder', name: 'Krydder og sauser',  mode: 'mnd' },
   { id: 'drikke',  name: 'Drikke',             mode: 'mnd' },
@@ -143,7 +147,8 @@ const STARTER = [
   ['Pasta','torr','pk',4], ['Ris','torr','pk',2], ['Havregryn','torr','pk',2], ['Hvetemel','torr','kg',2],
   ['Sukker','torr','kg',1], ['Kaffe','torr','pk',3], ['Knekkebrød','torr','pk',2],
   ['Hermetiske tomater','herm','boks',6], ['Kokosmelk','herm','boks',2], ['Syltetøy','herm','stk',1],
-  ['Kjøttdeig','frys','pk',6], ['Kyllingfilet','frys','pk',4], ['Fiskepinner','frys','pk',2], ['Brød','frys','stk',4],
+  ['Kjøttdeig','kjott','pk',6], ['Kyllingfilet','kjott','pk',4], ['Pølser','kjott','pk',2],
+  ['Laks','fisk','pk',2], ['Fiskepinner','fisk','pk',2], ['Brød','brod','stk',4], ['Pizza','frys','stk',2],
   ['Melk','kjol','l',3], ['Smør','kjol','pk',1], ['Ost','kjol','stk',1], ['Egg','kjol','pk',1], ['Yoghurt','kjol','stk',4],
   ['Poteter','frukt','kg',2], ['Løk','frukt','stk',4], ['Gulrøtter','frukt','pose',1], ['Epler','frukt','stk',6], ['Bananer','frukt','stk',6],
   ['Ketchup','krydder','flaske',1], ['Buljong','krydder','pk',1],
@@ -462,16 +467,16 @@ function viewListe() {
   const draft = r => S.draft[r.i.id] || { on: false, amt: r.amt };
   const section = (title, rows, note) => {
     if (!rows.length) return `<section class="card"><h2>${title}</h2><div class="row sub">${note}</div></section>`;
-    const groups = CATS.map(c => rows.filter(r => r.i.cat === c.id).sort((a, b) => byName(a.i, b.i))).filter(g => g.length);
-    return `<section class="card"><h2>${title}<span>${rows.length}</span></h2>` + groups.flat().map(r => {
+    const groups = CATS.map(c => ({ c, rows: rows.filter(r => r.i.cat === c.id).sort((a, b) => byName(a.i, b.i)) })).filter(g => g.rows.length);
+    return `<section class="card"><h2>${title}<span>${rows.length}</span></h2>` + groups.map(g => `<div class="grp">${g.c.name}</div>` + g.rows.map(r => {
       const d = draft(r);
       return `<div class="row ${d.on ? 'done' : ''}">
         <input type="checkbox" class="check" data-chk="${r.i.id}" ${d.on ? 'checked' : ''} aria-label="Lagt i kurven">
-        <div class="grow"><span class="name" style="cursor:default">${esc(r.i.name)}</span><div class="sub">${cat(r.i.cat).name} · ${r.why}</div></div>
+        <div class="grow"><span class="name" style="cursor:default">${esc(r.i.name)}</span><div class="sub">${r.why}</div></div>
         <input type="number" class="list-amt" inputmode="decimal" min="0" step="any" data-amt="${r.i.id}" value="${d.amt}" aria-label="Antall">
         <span class="sub" style="width:42px">${esc(r.i.unit)}</span>
       </div>`;
-    }).join('') + `</section>`;
+    }).join('')).join('') + `</section>`;
   };
 
   const all = [...mnd, ...behov];
@@ -505,9 +510,13 @@ function viewListe() {
     const lines = [`Handleliste – ${monthName(next)}`];
     const add = (title, rows) => {
       if (!rows.length) return;
-      lines.push('', title.toUpperCase());
-      for (const c of CATS) rows.filter(r => r.i.cat === c.id).sort((a, b) => byName(a.i, b.i))
-        .forEach(r => lines.push(`☐ ${r.i.name} – ${fmt(draft(r).amt)} ${r.i.unit}`));
+      lines.push('', '== ' + title.toUpperCase() + ' ==');
+      for (const c of CATS) {
+        const g = rows.filter(r => r.i.cat === c.id).sort((a, b) => byName(a.i, b.i));
+        if (!g.length) continue;
+        lines.push('', c.name + ':');
+        g.forEach(r => lines.push(`☐ ${r.i.name} – ${fmt(draft(r).amt)} ${r.i.unit}`));
+      }
     };
     add('Månedshandel', mnd); add('Ved behov', behov);
     const text = lines.join('\n');
@@ -574,7 +583,7 @@ function viewMer() {
     <section class="card"><h2>Slik bruker du appen</h2>
       <div class="row"><div class="sub">
         <p style="margin:0 0 8px"><b>1. Lager:</b> Legg inn varene du har. Trykk <b>−</b> når du bruker noe og <b>+</b> når du kjøper. Trykk på navnet for å legge inn større mengder eller telle opp.</p>
-        <p style="margin:0 0 8px"><b>2. Månedshandel eller ved behov:</b> Tørrvarer, hermetikk, frys og husholdning er satt til månedshandel. Meieri, frukt og grønt fylles på ved behov. Dette kan endres per vare.</p>
+        <p style="margin:0 0 8px"><b>2. Månedshandel eller ved behov:</b> Tørrvarer, hermetikk, kjøtt, fisk, frossenmat og husholdning er satt til månedshandel. Meieri, frukt og grønt fylles på ved behov. Dette kan endres per vare.</p>
         <p style="margin:0"><b>3. Handleliste:</b> Appen foreslår hva du trenger neste måned ut fra beholdning og faktisk forbruk. Kryss av i butikken og registrer innkjøpet etterpå, så er lageret oppdatert.</p>
       </div></div>
     </section>
