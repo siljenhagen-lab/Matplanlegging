@@ -1,0 +1,15 @@
+{
+  "name": "Matlager",
+  "short_name": "Matlager",
+  "description": "Hold oversikt over hva som er kjøpt og brukt, og få forslag til neste månedshandel",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f4ee",
+  "theme_color": "#3f6b4a",
+  "lang": "nb",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

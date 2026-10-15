@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Matlager</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon.svg">
+<meta name="theme-color" content="#3f6b4a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Matlager">
+<style>
+:root{
+  --bg:#f6f4ee; --card:#ffffff; --ink:#1f2a22; --muted:#6b756d; --line:#e3e0d6;
+  --accent:#3f6b4a; --accent-ink:#ffffff; --soft:#e7efe8; --warn:#b5651d; --warn-soft:#fbeedd;
+  --danger:#b3392f; --danger-soft:#f9e4e1; --bar:#d8d4c7;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#151a16; --card:#1f2620; --ink:#e8ece6; --muted:#9aa59c; --line:#323b33;
+    --accent:#7fb48d; --accent-ink:#0f1a12; --soft:#263429; --warn:#e3a35f; --warn-soft:#3a2e1f;
+    --danger:#e57a6f; --danger-soft:#3b2421; --bar:#3a443b;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+button,input,select{font:inherit;color:inherit}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(12px + env(safe-area-inset-top)) 16px 10px;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:22px;letter-spacing:-.01em}
+header p{margin:2px 0 0;color:var(--muted);font-size:13px}
+main{max-width:720px;margin:0 auto;padding:12px 16px 24px}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:none;padding:10px 4px 12px;font-size:12px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
+nav button svg{width:22px;height:22px}
+nav button.on{color:var(--accent);font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;margin:0 0 14px;overflow:hidden}
+.card h2{margin:0;padding:12px 14px 8px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;display:flex;justify-content:space-between;gap:8px}
+.row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.grow{flex:1;min-width:0}
+.name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:none;border:0;padding:0;text-align:left;cursor:pointer;width:100%;display:block}
+.sub{font-size:13px;color:var(--muted)}
+.bar{height:5px;background:var(--bar);border-radius:3px;margin-top:5px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.bar.low i{background:var(--warn)}
+.bar.empty i{background:var(--danger)}
+.qty{min-width:58px;text-align:center;font-variant-numeric:tabular-nums;font-weight:600}
+.qty small{display:block;font-weight:400;font-size:12px;color:var(--muted)}
+.round{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--card);font-size:22px;line-height:1;cursor:pointer;flex:none}
+.round.plus{background:var(--soft);border-color:transparent;color:var(--accent)}
+.round:active{transform:scale(.94)}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--danger);border-color:var(--danger-soft);background:var(--danger-soft)}
+.btn.small{padding:6px 10px;font-size:14px}
+.btn:disabled{opacity:.45}
+.toolbar{display:flex;gap:8px;margin:0 0 12px;flex-wrap:wrap}
+.toolbar input[type=search]{flex:1;min-width:150px}
+input[type=text],input[type=search],input[type=number],select{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px 12px;width:100%;min-width:0}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;font-size:14px;cursor:pointer}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--soft);color:var(--accent);font-weight:600;vertical-align:1px}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.empty{background:var(--danger-soft);color:var(--danger)}
+.empty-state{text-align:center;padding:28px 16px;color:var(--muted)}
+.empty-state .btn{margin-top:10px}
+.hint{font-size:13px;color:var(--muted);margin:0 0 12px}
+.row input.list-amt{width:72px;flex:none;text-align:right;padding:8px 10px}
+.check{width:24px;height:24px;flex:none;accent-color:var(--accent)}
+.row.done .name{text-decoration:line-through;color:var(--muted)}
+.monthbar{display:flex;align-items:center;justify-content:space-between;margin:0 0 12px}
+.monthbar strong{font-size:18px;text-transform:capitalize}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px 14px;text-align:right;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
+.pos{color:var(--accent)} .neg{color:var(--warn)}
+.undo{background:none;border:0;color:var(--muted);font-size:13px;cursor:pointer;text-decoration:underline}
+dialog{border:0;border-radius:18px;padding:0;width:min(520px,calc(100vw - 24px));max-height:calc(100vh - 40px);background:var(--card);color:var(--ink)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.dlg-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+.dlg-head h3{margin:0;font-size:18px}
+.dlg-body{padding:14px 16px;display:grid;gap:12px}
+.dlg-foot{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--line)}
+label.f{display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:600}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{flex:1;border:0;background:var(--card);padding:9px 6px;font-size:14px;cursor:pointer}
+.seg button.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.quick{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;background:var(--soft);padding:10px;border-radius:12px}
+.x{border:0;background:none;font-size:24px;line-height:1;cursor:pointer;color:var(--muted);padding:4px 8px}
+#toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:12px;font-size:14px;display:flex;gap:14px;align-items:center;transition:.2s;max-width:calc(100vw - 32px);z-index:20}
+#toast.show{opacity:1;transform:translateX(-50%);pointer-events:auto}
+#toast button{background:none;border:0;color:var(--bg);font-weight:700;text-decoration:underline;cursor:pointer;padding:0}
+@media (max-width:380px){.round{width:38px;height:38px}.qty{min-width:48px}}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Lager</h1>
+  <p id="subtitle"></p>
+</header>
+<main id="view"></main>
+
+<nav>
+  <button data-tab="lager" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7M8 3h8l1 4H7z"/></svg>Lager</button>
+  <button data-tab="liste"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>Handleliste</button>
+  <button data-tab="historikk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Historikk</button>
+  <button data-tab="mer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>Mer</button>
+</nav>
+
+<dialog id="dlg"></dialog>
+<div id="toast"><span id="toast-msg"></span><button id="toast-undo">Angre</button></div>
+
+<script>
+'use strict';
+
+/* ---------- Konstanter ---------- */
+const KEY = 'matlager.v1';
+const CATS = [
+  { id: 'torr',    name: 'Tørrvarer',          mode: 'mnd' },
+  { id: 'herm',    name: 'Hermetikk og glass', mode: 'mnd' },
+  { id: 'frys',    name: 'Fryser',             mode: 'mnd' },
+  { id: 'kjol',    name: 'Meieri og kjøl',     mode: 'behov' },
+  { id: 'frukt',   name: 'Frukt og grønt',     mode: 'behov' },
+  { id: 'krydder', name: 'Krydder og sauser',  mode: 'mnd' },
+  { id: 'drikke',  name: 'Drikke',             mode: 'mnd' },
+  { id: 'hush',    name: 'Husholdning',        mode: 'mnd' },
+  { id: 'annet',   name: 'Annet',              mode: 'mnd' },
+];
+const UNITS = ['stk', 'pk', 'boks', 'pose', 'flaske', 'kg', 'g', 'l', 'dl', 'rull'];
+const DECIMAL_UNITS = ['kg', 'l'];
+const DAY = 864e5;
+const STARTER = [
+  ['Pasta','torr','pk',4], ['Ris','torr','pk',2], ['Havregryn','torr','pk',2], ['Hvetemel','torr','kg',2],
+  ['Sukker','torr','kg',1], ['Kaffe','torr','pk',3], ['Knekkebrød','torr','pk',2],
+  ['Hermetiske tomater','herm','boks',6], ['Kokosmelk','herm','boks',2], ['Syltetøy','herm','stk',1],
+  ['Kjøttdeig','frys','pk',6], ['Kyllingfilet','frys','pk',4], ['Fiskepinner','frys','pk',2], ['Brød','frys','stk',4],
+  ['Melk','kjol','l',3], ['Smør','kjol','pk',1], ['Ost','kjol','stk',1], ['Egg','kjol','pk',1], ['Yoghurt','kjol','stk',4],
+  ['Poteter','frukt','kg',2], ['Løk','frukt','stk',4], ['Gulrøtter','frukt','pose',1], ['Epler','frukt','stk',6], ['Bananer','frukt','stk',6],
+  ['Ketchup','krydder','flaske',1], ['Buljong','krydder','pk',1],
+  ['Toalettpapir','hush','pk',1], ['Oppvaskmiddel','hush','flaske',1], ['Vaskemiddel','hush','pk',1],
+];
+
+/* ---------- Lagring ---------- */
+let S = load();
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      return { items: d.items || [], log: d.log || [], draft: d.draft || {} };
+    }
+  } catch (e) { /* tom start */ }
+  return { items: [], log: [], draft: {} };
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch (e) { alert('Klarte ikke å lagre. Er lagringsplassen full?'); }
+}
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+/* ---------- Hjelpere ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const cat = id => CATS.find(c => c.id === id) || CATS[CATS.length - 1];
+const item = id => S.items.find(i => i.id === id);
+const round2 = n => Math.round(n * 100) / 100;
+const fmt = n => round2(n).toLocaleString('nb-NO', { maximumFractionDigits: 2 });
+const roundUp = (n, unit) => DECIMAL_UNITS.includes(unit) ? Math.ceil(n * 2) / 2 : Math.ceil(n - 1e-9);
+const monthKey = ts => { const d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+const monthName = key => { const [y, m] = key.split('-'); return new Date(+y, +m - 1, 1).toLocaleDateString('nb-NO', { month: 'long', year: 'numeric' }); };
+const shiftMonth = (key, n) => { const [y, m] = key.split('-'); return monthKey(new Date(+y, +m - 1 + n, 1)); };
+const dateStr = ts => new Date(ts).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short' });
+const byName = (a, b) => a.name.localeCompare(b.name, 'nb');
+
+/* Gjennomsnittlig forbruk per 30 dager, basert på de siste 90 dagene
+   (eller kortere hvis varen er nyere enn det). */
+function monthlyUse(id) {
+  const now = Date.now(), from = now - 90 * DAY;
+  const entries = S.log.filter(e => e.item === id);
+  if (!entries.length) return 0;
+  const first = Math.min(...entries.map(e => e.ts));
+  const days = Math.max(30, Math.min(90, (now - first) / DAY));
+  const used = entries.filter(e => e.type === 'bruk' && e.ts >= from).reduce((s, e) => s - e.delta, 0);
+  return used / days * 30;
+}
+
+function status(it) {
+  if (it.qty <= 0) return 'empty';
+  if (it.target > 0 && it.qty < it.target) return 'low';
+  return 'ok';
+}
+
+/* ---------- Endringer i beholdning ---------- */
+let lastEntry = null;
+function change(id, type, amount, silent) {
+  const it = item(id);
+  if (!it || !amount) return;
+  let delta;
+  if (type === 'kjøp') delta = amount;
+  else if (type === 'bruk') delta = -Math.min(amount, it.qty);
+  else delta = amount - it.qty; // justering: amount = ny beholdning
+  delta = round2(delta);
+  if (!delta) { if (type === 'bruk' && !silent) toast(`${it.name} er allerede tom`); return; }
+  it.qty = round2(it.qty + delta);
+  const e = { id: uid(), item: id, type, delta, ts: Date.now() };
+  S.log.push(e);
+  save();
+  if (!silent) {
+    lastEntry = e;
+    const verb = type === 'kjøp' ? 'Kjøpt' : type === 'bruk' ? 'Brukt' : 'Justert';
+    toast(`${verb} ${fmt(Math.abs(delta))} ${it.unit} ${it.name}`, true);
+  }
+}
+function undoEntry(entryId) {
+  const idx = S.log.findIndex(e => e.id === entryId);
+  if (idx < 0) return;
+  const e = S.log[idx], it = item(e.item);
+  if (it) it.qty = Math.max(0, round2(it.qty - e.delta));
+  S.log.splice(idx, 1);
+  save();
+}
+
+/* ---------- Toast ---------- */
+let toastTimer;
+function toast(msg, undoable) {
+  $('#toast-msg').textContent = msg;
+  $('#toast-undo').style.display = undoable ? '' : 'none';
+  $('#toast').classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $('#toast').classList.remove('show'), 4000);
+}
+$('#toast-undo').onclick = () => {
+  if (lastEntry) { undoEntry(lastEntry.id); lastEntry = null; }
+  $('#toast').classList.remove('show');
+  render();
+};
+
+/* ---------- Navigasjon ---------- */
+let tab = 'lager';
+let filter = { q: '', low: false };
+let histMonth = monthKey(Date.now());
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  tab = b.dataset.tab;
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  window.scrollTo(0, 0);
+  render();
+});
+
+function render() {
+  const views = { lager: viewLager, liste: viewListe, historikk: viewHistorikk, mer: viewMer };
+  views[tab]();
+}
+
+/* ---------- Lager ---------- */
+function viewLager() {
+  const low = S.items.filter(i => status(i) !== 'ok').length;
+  $('#title').textContent = 'Lager';
+  $('#subtitle').textContent = S.items.length
+    ? `${S.items.length} varer · ${low ? low + ' under ønsket mengde' : 'alt på plass'}`
+    : 'Hva har du i skap og skuffer?';
+
+  if (!S.items.length) {
+    $('#view').innerHTML = `
+      <div class="card empty-state">
+        <p><b>Lageret er tomt.</b><br>Legg inn varene du pleier å ha hjemme. Antall settes til 0, så fyller du på når du handler.</p>
+        <button class="btn primary" id="starter">Start med vanlige varer</button><br>
+        <button class="btn" id="add-first">Legg til én og én vare</button>
+      </div>`;
+    $('#starter').onclick = () => {
+      STARTER.forEach(([name, c, unit, target]) => S.items.push({ id: uid(), name, cat: c, unit, target, qty: 0, mode: cat(c).mode }));
+      save(); render();
+      toast('Varer lagt til. Trykk på et navn for å endre eller slette.');
+    };
+    $('#add-first').onclick = () => openItem();
+    return;
+  }
+
+  const q = filter.q.trim().toLowerCase();
+  const list = S.items.filter(i => (!q || i.name.toLowerCase().includes(q)) && (!filter.low || status(i) !== 'ok'));
+  let html = `
+    <div class="toolbar">
+      <input type="search" id="q" placeholder="Søk etter vare" value="${esc(filter.q)}" autocomplete="off">
+      <button class="btn primary" id="add">+ Ny vare</button>
+    </div>
+    <div class="chips">
+      <button class="chip ${filter.low ? '' : 'on'}" data-low="0">Alle</button>
+      <button class="chip ${filter.low ? 'on' : ''}" data-low="1">Lite igjen (${low})</button>
+    </div>`;
+  for (const c of CATS) {
+    const rows = list.filter(i => i.cat === c.id).sort(byName);
+    if (!rows.length) continue;
+    html += `<section class="card"><h2>${c.name}</h2>` + rows.map(rowLager).join('') + `</section>`;
+  }
+  if (!list.length) html += `<div class="card empty-state">Ingen varer passer søket.</div>`;
+  $('#view').innerHTML = html;
+
+  const qi = $('#q');
+  qi.oninput = () => { filter.q = qi.value; const pos = qi.selectionStart; render(); const n = $('#q'); n.focus(); n.setSelectionRange(pos, pos); };
+  $('#add').onclick = () => openItem(null, filter.q.trim());
+  document.querySelectorAll('[data-low]').forEach(b => b.onclick = () => { filter.low = b.dataset.low === '1'; render(); });
+  document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openItem(b.dataset.open));
+  document.querySelectorAll('[data-use]').forEach(b => b.onclick = () => { change(b.dataset.use, 'bruk', 1); render(); });
+  document.querySelectorAll('[data-buy]').forEach(b => b.onclick = () => { change(b.dataset.buy, 'kjøp', 1); render(); });
+}
+function rowLager(i) {
+  const st = status(i);
+  const pct = i.target > 0 ? Math.min(100, i.qty / i.target * 100) : (i.qty > 0 ? 100 : 0);
+  const tag = st === 'empty' ? '<span class="tag empty">Tomt</span>' : st === 'low' ? '<span class="tag warn">Lite</span>' : '';
+  const modeTxt = i.mode === 'behov' ? 'ved behov' : 'månedshandel';
+  return `<div class="row">
+    <div class="grow">
+      <button class="name" data-open="${i.id}">${esc(i.name)} ${tag}</button>
+      <div class="sub">${i.target ? 'Ønsket ' + fmt(i.target) + ' ' + esc(i.unit) + ' · ' : ''}${modeTxt}</div>
+      <div class="bar ${st === 'ok' ? '' : st}"><i style="width:${pct}%"></i></div>
+    </div>
+    <button class="round" data-use="${i.id}" aria-label="Brukt én ${esc(i.unit)} ${esc(i.name)}">−</button>
+    <div class="qty">${fmt(i.qty)}<small>${esc(i.unit)}</small></div>
+    <button class="round plus" data-buy="${i.id}" aria-label="Kjøpt én ${esc(i.unit)} ${esc(i.name)}">+</button>
+  </div>`;
+}
+
+/* ---------- Vare-dialog ---------- */
+function openItem(id, presetName) {
+  const it = id ? item(id) : null;
+  const d = it ? { ...it } : { name: presetName || '', cat: 'torr', unit: 'stk', target: 0, qty: 0, mode: 'mnd' };
+  const dlg = $('#dlg');
+  const avg = it ? monthlyUse(it.id) : 0;
+  const recent = it ? S.log.filter(e => e.item === it.id).slice(-5).reverse() : [];
+
+  dlg.innerHTML = `
+    <form method="dialog" id="f">
+      <div class="dlg-head"><h3>${it ? esc(it.name) : 'Ny vare'}</h3><button type="button" class="x" id="close" aria-label="Lukk">×</button></div>
+      <div class="dlg-body">
+        ${it ? `
+        <div class="quick">
+          <input type="number" id="amt" inputmode="decimal" min="0" step="any" value="1" aria-label="Mengde">
+          <button type="button" class="btn" id="q-use">Brukt</button>
+          <button type="button" class="btn primary" id="q-buy">Kjøpt</button>
+        </div>
+        <div class="sub">På lager nå: <b>${fmt(it.qty)} ${esc(it.unit)}</b>${avg ? ` · Snittforbruk ca. <b>${fmt(avg)} ${esc(it.unit)}</b> per måned` : ''}</div>` : ''}
+        <label class="f">Navn<input type="text" id="name" required value="${esc(d.name)}" autocomplete="off"></label>
+        <div class="two">
+          <label class="f">Kategori<select id="cat">${CATS.map(c => `<option value="${c.id}" ${c.id === d.cat ? 'selected' : ''}>${c.name}</option>`).join('')}</select></label>
+          <label class="f">Enhet<select id="unit">${[...new Set([...UNITS, d.unit])].map(u => `<option ${u === d.unit ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select></label>
+        </div>
+        <div class="f" style="display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:600">Handles
+          <div class="seg" id="mode">
+            <button type="button" data-m="mnd" class="${d.mode === 'mnd' ? 'on' : ''}">Månedshandel</button>
+            <button type="button" data-m="behov" class="${d.mode === 'behov' ? 'on' : ''}">Ved behov</button>
+          </div>
+        </div>
+        <div class="two">
+          <label class="f">Ønsket på lager<input type="number" id="target" inputmode="decimal" min="0" step="any" value="${d.target || ''}" placeholder="0"></label>
+          <label class="f">${it ? 'Tell opp (antall nå)' : 'Har nå'}<input type="number" id="qty" inputmode="decimal" min="0" step="any" value="${d.qty}"></label>
+        </div>
+        <p class="hint" id="mode-hint" style="margin:0"></p>
+        ${recent.length ? `<div><div class="sub" style="font-weight:600;margin-bottom:4px">Siste registreringer</div>${recent.map(e =>
+          `<div class="sub">${dateStr(e.ts)} · ${e.type} <span class="${e.delta > 0 ? 'pos' : 'neg'}">${e.delta > 0 ? '+' : ''}${fmt(e.delta)}</span></div>`).join('')}</div>` : ''}
+      </div>
+      <div class="dlg-foot">
+        ${it ? '<button type="button" class="btn danger" id="del" style="margin-right:auto">Slett</button>' : ''}
+        <button type="button" class="btn" id="cancel">Avbryt</button>
+        <button type="submit" class="btn primary">Lagre</button>
+      </div>
+    </form>`;
+
+  let mode = d.mode, modeTouched = !!it;
+  const hint = () => $('#mode-hint').textContent = mode === 'mnd'
+    ? 'Ønsket på lager = hvor mye du vil ha ved starten av måneden. Handlelisten foreslår mer hvis du bruker mer enn dette.'
+    : 'Ønsket på lager = når du har mindre enn dette, havner varen på påfyll-listen.';
+  hint();
+  dlg.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
+    mode = b.dataset.m; modeTouched = true;
+    dlg.querySelectorAll('[data-m]').forEach(x => x.classList.toggle('on', x === b)); hint();
+  });
+  $('#cat').onchange = () => {
+    if (modeTouched) return;
+    mode = cat($('#cat').value).mode;
+    dlg.querySelectorAll('[data-m]').forEach(x => x.classList.toggle('on', x.dataset.m === mode)); hint();
+  };
+  const close = () => dlg.close();
+  $('#close').onclick = close; $('#cancel').onclick = close;
+
+  if (it) {
+    const quick = type => {
+      const a = parseFloat($('#amt').value);
+      if (!(a > 0)) return;
+      change(it.id, type, a); close(); render();
+    };
+    $('#q-use').onclick = () => quick('bruk');
+    $('#q-buy').onclick = () => quick('kjøp');
+    $('#del').onclick = () => {
+      if (!confirm(`Slette «${it.name}» og historikken for varen?`)) return;
+      S.items = S.items.filter(x => x.id !== it.id);
+      S.log = S.log.filter(e => e.item !== it.id);
+      delete S.draft[it.id];
+      save(); close(); render();
+    };
+  }
+
+  $('#f').onsubmit = ev => {
+    ev.preventDefault();
+    const name = $('#name').value.trim();
+    if (!name) return;
+    const target = Math.max(0, parseFloat($('#target').value) || 0);
+    const qty = Math.max(0, parseFloat($('#qty').value) || 0);
+    if (it) {
+      Object.assign(it, { name, cat: $('#cat').value, unit: $('#unit').value, target, mode });
+      if (round2(qty) !== it.qty) change(it.id, 'justering', qty, true);
+    } else {
+      const n = { id: uid(), name, cat: $('#cat').value, unit: $('#unit').value, target, qty: 0, mode };
+      S.items.push(n);
+      if (qty > 0) change(n.id, 'kjøp', qty, true);
+    }
+    save(); close(); render();
+  };
+  dlg.showModal();
+  if (!it) $('#name').focus();
+}
+
+/* ---------- Handleliste ---------- */
+function suggestions() {
+  const mnd = [], behov = [];
+  for (const i of S.items) {
+    if (i.mode === 'behov') {
+      if (status(i) !== 'ok' && (i.target > 0 || i.qty <= 0)) {
+        behov.push({ i, amt: roundUp(Math.max(1, i.target - i.qty), i.unit), why: i.qty <= 0 ? 'tomt' : `${fmt(i.qty)} igjen` });
+      }
+    } else {
+      const avg = monthlyUse(i.id);
+      const want = Math.max(i.target, avg);
+      const need = want - i.qty;
+      if (need > 0.01) {
+        const why = avg > i.target ? `bruker ca. ${fmt(avg)}/mnd` : `ønsket ${fmt(i.target)}`;
+        mnd.push({ i, amt: roundUp(need, i.unit), why: `${why}, har ${fmt(i.qty)}` });
+      }
+    }
+  }
+  return { mnd, behov };
+}
+function viewListe() {
+  const next = shiftMonth(monthKey(Date.now()), 1);
+  const { mnd, behov } = suggestions();
+  $('#title').textContent = 'Handleliste';
+  $('#subtitle').textContent = `Forslag til månedshandel · ${monthName(next)}`;
+
+  if (!S.items.length) {
+    $('#view').innerHTML = `<div class="card empty-state">Legg inn varer under <b>Lager</b> først, så lager appen handlelisten for deg.</div>`;
+    return;
+  }
+
+  const draft = r => S.draft[r.i.id] || { on: false, amt: r.amt };
+  const section = (title, rows, note) => {
+    if (!rows.length) return `<section class="card"><h2>${title}</h2><div class="row sub">${note}</div></section>`;
+    const groups = CATS.map(c => rows.filter(r => r.i.cat === c.id).sort((a, b) => byName(a.i, b.i))).filter(g => g.length);
+    return `<section class="card"><h2>${title}<span>${rows.length}</span></h2>` + groups.flat().map(r => {
+      const d = draft(r);
+      return `<div class="row ${d.on ? 'done' : ''}">
+        <input type="checkbox" class="check" data-chk="${r.i.id}" ${d.on ? 'checked' : ''} aria-label="Lagt i kurven">
+        <div class="grow"><span class="name" style="cursor:default">${esc(r.i.name)}</span><div class="sub">${cat(r.i.cat).name} · ${r.why}</div></div>
+        <input type="number" class="list-amt" inputmode="decimal" min="0" step="any" data-amt="${r.i.id}" value="${d.amt}" aria-label="Antall">
+        <span class="sub" style="width:42px">${esc(r.i.unit)}</span>
+      </div>`;
+    }).join('') + `</section>`;
+  };
+
+  const all = [...mnd, ...behov];
+  const checked = all.filter(r => S.draft[r.i.id]?.on).length;
+  $('#view').innerHTML = `
+    <p class="hint">Forslagene bygger på hva du har på lager nå, hvor mye du ønsker å ha, og hva du faktisk har brukt de siste tre månedene. Kryss av det du legger i kurven, og trykk <b>Registrer innkjøp</b> når du er hjemme.</p>
+    <div class="toolbar">
+      <button class="btn" id="share" ${all.length ? '' : 'disabled'}>Del / kopier liste</button>
+      <button class="btn primary" id="register" ${checked ? '' : 'disabled'}>Registrer innkjøp (${checked})</button>
+    </div>
+    ${section('Månedshandel', mnd, 'Du har nok av alt du månedshandler. 🎉')}
+    ${section('Fylles på ved behov', behov, 'Ingen meieri, frukt eller grønt under ønsket mengde.')}
+  `;
+
+  const byId = Object.fromEntries(all.map(r => [r.i.id, r]));
+  const setDraft = (id, patch) => { S.draft[id] = { ...draft(byId[id]), ...patch }; save(); };
+  document.querySelectorAll('[data-chk]').forEach(c => c.onchange = () => { setDraft(c.dataset.chk, { on: c.checked }); render(); });
+  document.querySelectorAll('[data-amt]').forEach(inp => inp.onchange = () => setDraft(inp.dataset.amt, { amt: Math.max(0, parseFloat(inp.value) || 0) }));
+
+  $('#register').onclick = () => {
+    let n = 0;
+    for (const r of all) {
+      const d = S.draft[r.i.id];
+      if (d?.on && d.amt > 0) { change(r.i.id, 'kjøp', d.amt, true); n++; }
+    }
+    for (const r of all) delete S.draft[r.i.id];
+    save(); render();
+    toast(`${n} ${n === 1 ? 'vare' : 'varer'} lagt inn på lager`);
+  };
+  $('#share').onclick = async () => {
+    const lines = [`Handleliste – ${monthName(next)}`];
+    const add = (title, rows) => {
+      if (!rows.length) return;
+      lines.push('', title.toUpperCase());
+      for (const c of CATS) rows.filter(r => r.i.cat === c.id).sort((a, b) => byName(a.i, b.i))
+        .forEach(r => lines.push(`☐ ${r.i.name} – ${fmt(draft(r).amt)} ${r.i.unit}`));
+    };
+    add('Månedshandel', mnd); add('Ved behov', behov);
+    const text = lines.join('\n');
+    try {
+      if (navigator.share) await navigator.share({ title: 'Handleliste', text });
+      else { await navigator.clipboard.writeText(text); toast('Handlelisten er kopiert'); }
+    } catch (e) {
+      if (e.name !== 'AbortError') { try { await navigator.clipboard.writeText(text); toast('Handlelisten er kopiert'); } catch { prompt('Kopier listen:', text); } }
+    }
+  };
+}
+
+/* ---------- Historikk ---------- */
+function viewHistorikk() {
+  $('#title').textContent = 'Historikk';
+  $('#subtitle').textContent = 'Hva ble kjøpt og brukt hver måned';
+  const entries = S.log.filter(e => monthKey(e.ts) === histMonth);
+  const per = {};
+  for (const e of entries) {
+    const p = per[e.item] || (per[e.item] = { kjøpt: 0, brukt: 0 });
+    if (e.type === 'kjøp') p.kjøpt += e.delta;
+    else if (e.type === 'bruk') p.brukt -= e.delta;
+  }
+  const rows = Object.entries(per).map(([id, p]) => ({ it: item(id), ...p })).filter(r => r.it && (r.kjøpt || r.brukt))
+    .sort((a, b) => b.brukt - a.brukt || byName(a.it, b.it));
+  const isNow = histMonth === monthKey(Date.now());
+  const recent = entries.slice().reverse().slice(0, 30);
+
+  $('#view').innerHTML = `
+    <div class="monthbar">
+      <button class="btn small" id="prev" aria-label="Forrige måned">‹</button>
+      <strong>${monthName(histMonth)}</strong>
+      <button class="btn small" id="nextm" ${isNow ? 'disabled' : ''} aria-label="Neste måned">›</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>${rows.filter(r => r.kjøpt).length}</b><span>varer kjøpt</span></div>
+      <div class="stat"><b>${rows.filter(r => r.brukt).length}</b><span>varer brukt</span></div>
+      <div class="stat"><b>${entries.length}</b><span>registreringer</span></div>
+    </div>
+    ${rows.length ? `<section class="card"><h2>Per vare</h2>
+      <table><thead><tr><th>Vare</th><th>Kjøpt</th><th>Brukt</th></tr></thead><tbody>
+      ${rows.map(r => `<tr><td>${esc(r.it.name)}</td><td class="pos">${r.kjøpt ? fmt(r.kjøpt) + ' ' + esc(r.it.unit) : '–'}</td><td class="neg">${r.brukt ? fmt(r.brukt) + ' ' + esc(r.it.unit) : '–'}</td></tr>`).join('')}
+      </tbody></table></section>` : `<div class="card empty-state">Ingen registreringer i ${monthName(histMonth)}.</div>`}
+    ${recent.length ? `<section class="card"><h2>Siste registreringer</h2>
+      ${recent.map(e => { const it = item(e.item); return it ? `<div class="row">
+        <div class="grow"><div>${esc(it.name)} <span class="${e.delta > 0 ? 'pos' : 'neg'}">${e.delta > 0 ? '+' : ''}${fmt(e.delta)} ${esc(it.unit)}</span></div>
+        <div class="sub">${dateStr(e.ts)} · ${e.type}</div></div>
+        <button class="undo" data-undo="${e.id}">Angre</button></div>` : ''; }).join('')}
+    </section>` : ''}`;
+
+  $('#prev').onclick = () => { histMonth = shiftMonth(histMonth, -1); render(); };
+  $('#nextm').onclick = () => { histMonth = shiftMonth(histMonth, 1); render(); };
+  document.querySelectorAll('[data-undo]').forEach(b => b.onclick = () => {
+    if (!confirm('Angre denne registreringen? Beholdningen endres tilbake.')) return;
+    undoEntry(b.dataset.undo); render();
+  });
+}
+
+/* ---------- Mer ---------- */
+function viewMer() {
+  $('#title').textContent = 'Mer';
+  $('#subtitle').textContent = 'Sikkerhetskopi og innstillinger';
+  $('#view').innerHTML = `
+    <section class="card"><h2>Slik bruker du appen</h2>
+      <div class="row"><div class="sub">
+        <p style="margin:0 0 8px"><b>1. Lager:</b> Legg inn varene du har. Trykk <b>−</b> når du bruker noe og <b>+</b> når du kjøper. Trykk på navnet for å legge inn større mengder eller telle opp.</p>
+        <p style="margin:0 0 8px"><b>2. Månedshandel eller ved behov:</b> Tørrvarer, hermetikk, frys og husholdning er satt til månedshandel. Meieri, frukt og grønt fylles på ved behov. Dette kan endres per vare.</p>
+        <p style="margin:0"><b>3. Handleliste:</b> Appen foreslår hva du trenger neste måned ut fra beholdning og faktisk forbruk. Kryss av i butikken og registrer innkjøpet etterpå, så er lageret oppdatert.</p>
+      </div></div>
+    </section>
+    <section class="card"><h2>Sikkerhetskopi</h2>
+      <div class="row"><div class="grow sub">Dataene lagres bare på denne enheten. Ta en kopi av og til, eller for å flytte til en annen telefon.</div></div>
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn" id="export">Last ned kopi</button>
+        <label class="btn" style="cursor:pointer">Hent fra kopi<input type="file" id="import" accept="application/json,.json" hidden></label>
+      </div>
+    </section>
+    <section class="card"><h2>Nullstill</h2>
+      <div class="row"><div class="grow sub">Sletter alle varer og all historikk på denne enheten.</div>
+      <button class="btn danger" id="wipe">Slett alt</button></div>
+    </section>`;
+
+  $('#export').onclick = () => {
+    const blob = new Blob([JSON.stringify({ app: 'matlager', v: 1, ...S }, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `matlager-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  $('#import').onchange = async ev => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    try {
+      const d = JSON.parse(await file.text());
+      if (!Array.isArray(d.items) || !Array.isArray(d.log)) throw new Error('format');
+      if (!confirm(`Erstatte dagens data med kopien (${d.items.length} varer)?`)) return;
+      S = { items: d.items, log: d.log, draft: d.draft || {} };
+      save(); toast('Kopien er hentet inn'); tab = 'lager';
+      document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x.dataset.tab === 'lager'));
+      render();
+    } catch (e) { alert('Filen kunne ikke leses som en Matlager-kopi.'); }
+  };
+  $('#wipe').onclick = () => {
+    if (!confirm('Slette alle varer og all historikk? Dette kan ikke angres.')) return;
+    S = { items: [], log: [], draft: {} }; save(); render();
+  };
+}
+
+render();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+</script>
+</body>
+</html>
