@@ -17,20 +17,27 @@
   --danger:#b3392f; --danger-soft:#f9e4e1; --bar:#d8d4c7;
 }
 @media (prefers-color-scheme: dark){
-  :root{
+  :root:not([data-theme="light"]){
     --bg:#151a16; --card:#1f2620; --ink:#e8ece6; --muted:#9aa59c; --line:#323b33;
     --accent:#7fb48d; --accent-ink:#0f1a12; --soft:#263429; --warn:#e3a35f; --warn-soft:#3a2e1f;
-    --danger:#e57a6f; --danger-soft:#3b2421; --bar:#3a443b;
+    --danger:#e57a6f; --danger-soft:#3b2421; --bar:#3a443b; color-scheme:dark;
   }
+}
+:root[data-theme="dark"]{
+  --bg:#151a16; --card:#1f2620; --ink:#e8ece6; --muted:#9aa59c; --line:#323b33;
+  --accent:#7fb48d; --accent-ink:#0f1a12; --soft:#263429; --warn:#e3a35f; --warn-soft:#3a2e1f;
+  --danger:#e57a6f; --danger-soft:#3b2421; --bar:#3a443b; color-scheme:dark;
 }
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;padding-bottom:calc(76px + env(safe-area-inset-bottom))}
 button,input,select{font:inherit;color:inherit}
-header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(12px + env(safe-area-inset-top)) 16px 10px;border-bottom:1px solid var(--line)}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:12px 10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line)}
 header h1{margin:0;font-size:22px;letter-spacing:-.01em}
 header p{margin:2px 0 0;color:var(--muted);font-size:13px}
-main{max-width:720px;margin:0 auto;padding:12px 16px 24px}
+main{max-width:720px;margin:0 auto;padding-block:12px 24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+#ask p{margin:0;white-space:pre-line}
+#ask textarea{width:100%;min-height:220px;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--bg);color:var(--ink);font:13px/1.4 ui-monospace,Menlo,monospace}
 nav{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;border:0;background:none;padding:10px 4px 12px;font-size:12px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
 nav button svg{width:22px;height:22px}
@@ -119,6 +126,7 @@ label.f{display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:600}
 </nav>
 
 <dialog id="dlg"></dialog>
+<dialog id="ask"></dialog>
 <div id="toast"><span id="toast-msg"></span><button id="toast-undo">Angre</button></div>
 
 <script>
@@ -169,7 +177,7 @@ function load() {
 }
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
-  catch (e) { alert('Klarte ikke å lagre. Er lagringsplassen full?'); }
+  catch (e) { toast('Klarte ikke å lagre på denne enheten.'); }
 }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -233,6 +241,34 @@ function undoEntry(entryId) {
   if (it) it.qty = Math.max(0, round2(it.qty - e.delta));
   S.log.splice(idx, 1);
   save();
+}
+
+/* ---------- Egne dialoger (erstatter confirm/prompt) ---------- */
+function ask(msg, okLabel = 'OK', danger = false) {
+  const d = $('#ask');
+  d.innerHTML = `<div class="dlg-body"><p>${esc(msg)}</p></div>
+    <div class="dlg-foot"><button class="btn" id="ask-no">Avbryt</button><button class="btn ${danger ? 'danger' : 'primary'}" id="ask-yes">${esc(okLabel)}</button></div>`;
+  return new Promise(res => {
+    const done = v => { d.close(); res(v); };
+    $('#ask-no').onclick = () => done(false);
+    $('#ask-yes').onclick = () => done(true);
+    d.oncancel = () => res(false);
+    d.showModal();
+  });
+}
+function showText(title, text) {
+  const d = $('#ask');
+  d.innerHTML = `<div class="dlg-head"><h3>${esc(title)}</h3><button class="x" id="ask-x" aria-label="Lukk">×</button></div>
+    <div class="dlg-body"><textarea id="ask-text" readonly></textarea></div>
+    <div class="dlg-foot"><button class="btn primary" id="ask-copy">Kopier</button></div>`;
+  $('#ask-text').value = text;
+  $('#ask-x').onclick = () => d.close();
+  $('#ask-copy').onclick = () => {
+    const t = $('#ask-text');
+    navigator.clipboard.writeText(text).then(() => { d.close(); toast('Kopiert'); })
+      .catch(() => { t.focus(); t.select(); toast('Merk teksten er valgt. Kopier den manuelt.'); });
+  };
+  d.showModal();
 }
 
 /* ---------- Toast ---------- */
@@ -404,8 +440,8 @@ function openItem(id, presetName) {
     };
     $('#q-use').onclick = () => quick('bruk');
     $('#q-buy').onclick = () => quick('kjøp');
-    $('#del').onclick = () => {
-      if (!confirm(`Slette «${it.name}» og historikken for varen?`)) return;
+    $('#del').onclick = async () => {
+      if (!await ask(`Slette «${it.name}» og historikken for varen?`, 'Slett', true)) return;
       S.items = S.items.filter(x => x.id !== it.id);
       S.log = S.log.filter(e => e.item !== it.id);
       delete S.draft[it.id];
@@ -520,12 +556,11 @@ function viewListe() {
     };
     add('Månedshandel', mnd); add('Ved behov', behov);
     const text = lines.join('\n');
-    try {
-      if (navigator.share) await navigator.share({ title: 'Handleliste', text });
-      else { await navigator.clipboard.writeText(text); toast('Handlelisten er kopiert'); }
-    } catch (e) {
-      if (e.name !== 'AbortError') { try { await navigator.clipboard.writeText(text); toast('Handlelisten er kopiert'); } catch { prompt('Kopier listen:', text); } }
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Handleliste', text }); return; }
+      catch (e) { if (e.name === 'AbortError') return; }
     }
+    showText('Handleliste', text);
   };
 }
 
@@ -569,8 +604,8 @@ function viewHistorikk() {
 
   $('#prev').onclick = () => { histMonth = shiftMonth(histMonth, -1); render(); };
   $('#nextm').onclick = () => { histMonth = shiftMonth(histMonth, 1); render(); };
-  document.querySelectorAll('[data-undo]').forEach(b => b.onclick = () => {
-    if (!confirm('Angre denne registreringen? Beholdningen endres tilbake.')) return;
+  document.querySelectorAll('[data-undo]').forEach(b => b.onclick = async () => {
+    if (!await ask('Angre denne registreringen? Beholdningen endres tilbake.', 'Angre')) return;
     undoEntry(b.dataset.undo); render();
   });
 }
@@ -591,6 +626,7 @@ function viewMer() {
       <div class="row"><div class="grow sub">Dataene lagres bare på denne enheten. Ta en kopi av og til, eller for å flytte til en annen telefon.</div></div>
       <div class="row" style="flex-wrap:wrap">
         <button class="btn" id="export">Last ned kopi</button>
+        <button class="btn" id="export-text">Vis kopi som tekst</button>
         <label class="btn" style="cursor:pointer">Hent fra kopi<input type="file" id="import" accept="application/json,.json" hidden></label>
       </div>
     </section>
@@ -607,21 +643,22 @@ function viewMer() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
+  $('#export-text').onclick = () => showText('Sikkerhetskopi', JSON.stringify({ app: 'matlager', v: 1, ...S }));
   $('#import').onchange = async ev => {
     const file = ev.target.files[0];
     if (!file) return;
     try {
       const d = JSON.parse(await file.text());
       if (!Array.isArray(d.items) || !Array.isArray(d.log)) throw new Error('format');
-      if (!confirm(`Erstatte dagens data med kopien (${d.items.length} varer)?`)) return;
+      if (!await ask(`Erstatte dagens data med kopien (${d.items.length} varer)?`, 'Erstatt', true)) return;
       S = { items: d.items, log: d.log, draft: d.draft || {} };
       save(); toast('Kopien er hentet inn'); tab = 'lager';
       document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x.dataset.tab === 'lager'));
       render();
-    } catch (e) { alert('Filen kunne ikke leses som en Matlager-kopi.'); }
+    } catch (e) { toast('Filen kunne ikke leses som en Matlager-kopi.'); }
   };
-  $('#wipe').onclick = () => {
-    if (!confirm('Slette alle varer og all historikk? Dette kan ikke angres.')) return;
+  $('#wipe').onclick = async () => {
+    if (!await ask('Slette alle varer og all historikk? Dette kan ikke angres.', 'Slett alt', true)) return;
     S = { items: [], log: [], draft: {} }; save(); render();
   };
 }
