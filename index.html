@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Matlager</title>
+<title>Matplanlegging</title>
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./icon.svg">
 <meta name="theme-color" content="#3f6b4a">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Matlager">
+<meta name="apple-mobile-web-app-title" content="Matplanlegging">
 <style>
 :root{
   --bg:#f6f4ee; --card:#ffffff; --ink:#1f2a22; --muted:#6b756d; --line:#e3e0d6;
@@ -997,7 +997,7 @@ function viewMer() {
     const blob = new Blob([JSON.stringify({ app: 'matlager', v: 1, ...S }, null, 1)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `matlager-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `matplanlegging-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
@@ -1012,7 +1012,7 @@ function viewMer() {
       if (!await ask(`Erstatte dagens data med kopien (${d.items.length} varer)?`, 'Erstatt', true)) return;
       S = { items: d.items, log: d.log, draft: d.draft || {}, dinners: d.dinners || [], plan: d.plan || {} };
       save(); toast('Kopien er hentet inn'); go('plan');
-    } catch (e) { toast('Filen kunne ikke leses som en Matlager-kopi.'); }
+    } catch (e) { toast('Filen kunne ikke leses som en Matplanlegging-kopi.'); }
   };
   $('#wipe').onclick = async () => {
     if (!await ask('Slette alle varer og all historikk? Dette kan ikke angres.', 'Slett alt', true)) return;

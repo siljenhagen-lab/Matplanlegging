@@ -1,6 +1,6 @@
 {
-  "name": "Matlager",
-  "short_name": "Matlager",
+  "name": "Matplanlegging",
+  "short_name": "Matplanlegging",
   "description": "Hold oversikt over hva som er kjøpt og brukt, og få forslag til neste månedshandel",
   "start_url": "./",
   "scope": "./",
