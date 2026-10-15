@@ -1,8 +1,13 @@
-const CACHE = 'matlager-v6';
+const CACHE = 'matlager-v7';
 const APP_SHELL = ['./', './index.html', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(APP_SHELL)).then(() => self.skipWaiting()));
+  // Hent filene rett fra nettet, ikke fra nettleserens mellomlager
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => c.addAll(APP_SHELL.map(u => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
@@ -13,18 +18,15 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Serve from cache straight away, refresh the cache in the background
+// Nyeste versjon fra nettet når vi er på nett, lagret kopi når vi ikke er det
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
+  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
-    caches.open(CACHE).then(cache =>
-      cache.match(e.request).then(hit => {
-        const net = fetch(e.request).then(resp => {
-          if (resp.ok) cache.put(e.request, resp.clone());
-          return resp;
-        }).catch(() => hit);
-        return hit || net;
+    fetch(e.request, { cache: 'no-cache' })
+      .then(resp => {
+        if (resp.ok) { const copy = resp.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
+        return resp;
       })
-    )
+      .catch(() => caches.match(e.request, { ignoreSearch: true }))
   );
 });
