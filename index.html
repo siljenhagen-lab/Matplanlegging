@@ -215,6 +215,7 @@ function load() {
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
   catch (e) { toast('Klarte ikke å lagre på denne enheten.'); }
+  try { scheduleSync(); } catch (e) { /* synkronisering er ikke lastet ennå */ }
 }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -1186,6 +1187,27 @@ function viewMer() {
       <div class="row"><div class="grow sub">Hva som ble kjøpt og brukt, måned for måned.</div>
       <button class="btn" id="to-hist">Se historikk</button></div>
     </section>
+    ${syncCardHtml()}
+    <section class="card"><h2>Installer som app på telefonen</h2>
+      <div class="row"><div class="sub">
+        <p style="margin:0 0 8px">Da får appen et eget ikon på hjemskjermen, åpner i fullskjerm og virker uten nett.</p>
+        <p style="margin:0 0 4px"><b>Android (Chrome)</b></p>
+        <ol style="margin:0 0 10px;padding-left:20px;display:grid;gap:3px">
+          <li>Åpne appens nettadresse i <b>Chrome</b>.</li>
+          <li>Trykk på <b>⋮</b> (tre prikker) øverst til høyre.</li>
+          <li>Velg <b>Installer app</b> eller <b>Legg til på startskjermen</b>, og deretter <b>Installer</b>.</li>
+          <li>Appen dukker opp blant de andre appene. Hold inne ikonet for å flytte det til hjemskjermen.</li>
+        </ol>
+        <p style="margin:0 0 4px"><b>iPhone og iPad (Safari)</b></p>
+        <ol style="margin:0 0 10px;padding-left:20px;display:grid;gap:3px">
+          <li>Åpne appens nettadresse i <b>Safari</b>.</li>
+          <li>Trykk på <b>Del-knappen</b> (firkanten med en pil opp) nederst eller øverst.</li>
+          <li>Bla ned og velg <b>Legg til på Hjem-skjerm</b>.</li>
+          <li>Trykk <b>Legg til</b> øverst til høyre.</li>
+        </ol>
+        <p style="margin:0">Adresse: <b>siljenhagen-lab.github.io/Matplanlegging</b>. Det du har lagt inn i nettleseren, følger ikke alltid med til den installerte appen. Bruk <b>Eksporter data</b> og <b>Importer data</b> hvis noe mangler, eller slå på synkronisering.</p>
+      </div></div>
+    </section>
     <section class="card"><h2>Slik kan du bruke appen</h2>
       <div class="row"><div class="sub">
         <p style="margin:0 0 8px">Gjør stegene i den rekkefølgen som passer deg.</p>
@@ -1234,6 +1256,7 @@ function viewMer() {
     toast('Filen er lagret i Nedlastinger');
   };
   $('#to-hist').onclick = () => go('historikk');
+  bindSyncCard();
   $('#export-text').onclick = () => showText('Sikkerhetskopi', JSON.stringify({ app: 'matlager', v: 1, ...S }));
   $('#import').onchange = async ev => {
     const file = ev.target.files[0];
@@ -1241,19 +1264,295 @@ function viewMer() {
     try {
       const d = JSON.parse(await file.text());
       if (!Array.isArray(d.items) || !Array.isArray(d.log)) throw new Error('format');
-      if (!await ask(`Importere ${(d.dinners || []).length} middagstips og ${d.items.length} varer? Det som ligger i appen nå, blir erstattet.`, 'Importer', true)) return;
+      if (!await ask(`Importere ${(d.dinners || []).length} middagstips og ${d.items.length} varer? Det som ligger i appen nå, blir erstattet.${SY ? ' Synkronisering er på, så det blir erstattet for hele husstanden.' : ''}`, 'Importer', true)) return;
       S = { items: d.items, log: d.log, draft: d.draft || {}, dinners: d.dinners || [], plan: d.plan || {}, extras: d.extras || [], settings: d.settings || {} };
       save(); toast('Dataene er importert'); go('plan');
     } catch (e) { toast('Filen kunne ikke leses. Velg en fil som er eksportert fra Matplanlegging.'); }
     ev.target.value = '';
   };
   $('#wipe').onclick = async () => {
-    if (!await ask('Slette alle varer og all historikk? Dette kan ikke angres.', 'Slett alt', true)) return;
+    if (!await ask(`Slette alle varer og all historikk? Dette kan ikke angres.${SY ? ' Synkronisering er på, så det slettes for hele husstanden. Slå av synkronisering først hvis du bare vil tømme denne telefonen.' : ''}`, 'Slett alt', true)) return;
     S = { items: [], log: [], draft: {}, dinners: [], plan: {}, extras: [], settings: {} }; save(); render();
   };
 }
 
+/* ---------- Synkronisering via husstandens egen Supabase ---------- */
+const SYNC_KEY = 'matplan.sync', BASE_KEY = 'matplan.syncbase';
+const SYNC_SQL = `-- Matplanlegging: synkronisering for husstanden
+create table if not exists public.matplan_sync (
+  id text primary key,
+  data jsonb not null,
+  version bigint not null default 1,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+-- Ingen tilgang direkte til tabellen, bare via funksjonene under
+alter table public.matplan_sync enable row level security;
+revoke all on public.matplan_sync from anon, authenticated;
+
+create or replace function public.matplan_get(p_id text)
+returns table(data jsonb, version bigint, updated_at timestamptz, updated_by text)
+language sql security definer set search_path = public as $$
+  select data, version, updated_at, updated_by from matplan_sync where id = p_id;
+$$;
+
+create or replace function public.matplan_put(p_id text, p_data jsonb, p_base bigint, p_by text)
+returns bigint
+language plpgsql security definer set search_path = public as $$
+declare v bigint;
+begin
+  if length(p_id) < 20 then raise exception 'Husstandskoden er for kort'; end if;
+  insert into matplan_sync as m (id, data, version, updated_by) values (p_id, p_data, 1, p_by)
+  on conflict (id) do update
+    set data = excluded.data, version = m.version + 1, updated_at = now(), updated_by = excluded.updated_by
+    where m.version = p_base
+  returning m.version into v;
+  return v; -- null betyr at noen andre lagret først
+end $$;
+
+grant execute on function public.matplan_get(text) to anon;
+grant execute on function public.matplan_put(text, jsonb, bigint, text) to anon;`;
+
+let SY = (() => { try { return JSON.parse(localStorage.getItem(SYNC_KEY)) || null; } catch (e) { return null; } })();
+const saveSY = () => { try { SY ? localStorage.setItem(SYNC_KEY, JSON.stringify(SY)) : localStorage.removeItem(SYNC_KEY); } catch (e) { /* ignorer */ } };
+const getBase = () => { try { return JSON.parse(localStorage.getItem(BASE_KEY)) || emptyState(); } catch (e) { return emptyState(); } };
+const setBase = st => { try { localStorage.setItem(BASE_KEY, JSON.stringify(st)); } catch (e) { /* ignorer */ } };
+function emptyState() { return { items: [], log: [], draft: {}, dinners: [], plan: {}, extras: [], settings: {} }; }
+function normState(d) { const e = emptyState(); for (const k of Object.keys(e)) if (d && d[k] !== undefined) e[k] = d[k]; return e; }
+
+let syncState = { busy: false, error: '', timer: null };
+
+async function rpc(fn, body, cfg = SY) {
+  const headers = { 'Content-Type': 'application/json', apikey: cfg.key };
+  if (cfg.key.startsWith('eyJ')) headers.Authorization = 'Bearer ' + cfg.key;
+  let res;
+  try {
+    res = await fetch(cfg.url.replace(/\/+$/, '') + '/rest/v1/rpc/' + fn, { method: 'POST', headers, body: JSON.stringify(body), cache: 'no-store' });
+  } catch (e) { throw new Error('Fikk ikke kontakt med Supabase. Sjekk nettet og adressen.'); }
+  const txt = await res.text();
+  let json = null; try { json = txt ? JSON.parse(txt) : null; } catch (e) { /* ikke JSON */ }
+  if (!res.ok) {
+    if (json && json.code === 'PGRST202') throw new Error('Fant ikke synkroniseringsfunksjonene. Har du kjørt SQL-koden i Supabase?');
+    if (res.status === 401 || res.status === 403) throw new Error('Supabase godtok ikke nøkkelen. Bruk «publishable» eller «anon»-nøkkelen.');
+    throw new Error((json && (json.message || json.hint)) || `Supabase svarte med feil (${res.status}).`);
+  }
+  return json;
+}
+
+/* Tre-veis sammenslåing: det som bare er endret ett sted, beholdes.
+   Er samme ting endret begge steder, vinner denne telefonen, men
+   lagerbeholdningen slås sammen (begge endringene telles med). */
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+function mergeMap(base, local, remote, both) {
+  const out = {};
+  for (const k of new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(remote)])) {
+    const b = base[k], l = local[k], r = remote[k];
+    const lc = !same(b, l), rc = !same(b, r);
+    const v = !lc ? r : !rc ? l : (l !== undefined && r !== undefined && both) ? both(b, l, r) : (l !== undefined ? l : r);
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+const byIdMap = arr => Object.fromEntries((arr || []).map(x => [x.id, x]));
+const flatPlan = plan => { const o = {}; for (const [m, days] of Object.entries(plan || {})) for (const [d, v] of Object.entries(days)) o[m + '|' + d] = v; return o; };
+function mergeStates(base, local, remote) {
+  const items = mergeMap(byIdMap(base.items), byIdMap(local.items), byIdMap(remote.items), (b, l, r) =>
+    ({ ...l, qty: Math.max(0, round2(r.qty + l.qty - (b ? b.qty : 0))) }));
+  const plan = {};
+  for (const [k, v] of Object.entries(mergeMap(flatPlan(base.plan), flatPlan(local.plan), flatPlan(remote.plan)))) {
+    const [m, d] = k.split('|'); (plan[m] || (plan[m] = {}))[d] = v;
+  }
+  return {
+    items: Object.values(items),
+    log: Object.values(mergeMap(byIdMap(base.log), byIdMap(local.log), byIdMap(remote.log))).sort((a, b) => a.ts - b.ts),
+    dinners: Object.values(mergeMap(byIdMap(base.dinners), byIdMap(local.dinners), byIdMap(remote.dinners))),
+    extras: Object.values(mergeMap(byIdMap(base.extras), byIdMap(local.extras), byIdMap(remote.extras))),
+    draft: mergeMap(base.draft || {}, local.draft || {}, remote.draft || {}),
+    settings: mergeMap(base.settings || {}, local.settings || {}, remote.settings || {}),
+    plan,
+  };
+}
+
+function scheduleSync(delay = 1500) {
+  if (!SY) return;
+  clearTimeout(syncState.timer);
+  syncState.timer = setTimeout(() => syncNow(), delay);
+}
+
+async function syncNow(manual) {
+  if (!SY || syncState.busy) return;
+  if (!navigator.onLine) { syncState.error = 'Ingen nettforbindelse. Endringene sendes når du er på nett igjen.'; refreshSyncCard(); return; }
+  syncState.busy = true; refreshSyncCard();
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const rows = await rpc('matplan_get', { p_id: SY.code });
+      const remote = rows && rows[0];
+      const base = getBase();
+      let next = S, baseVersion = SY.version || 0;
+      if (remote && remote.version !== SY.version) {
+        // Noen andre har lagret siden sist: slå sammen
+        next = mergeStates(base, S, normState(remote.data));
+        baseVersion = remote.version;
+        SY.lastBy = remote.updated_by;
+        if (!same(next, S)) { S = next; persistLocal(); render(); }
+        if (same(next, normState(remote.data))) { SY.version = remote.version; setBase(next); break; }
+      } else if (remote && same(S, base)) {
+        break; // ingenting nytt noen steder
+      }
+      const v = await rpc('matplan_put', { p_id: SY.code, p_data: next, p_base: remote ? baseVersion : 0, p_by: SY.device || 'Ukjent telefon' });
+      if (v !== null && v !== undefined) { SY.version = v; SY.lastBy = SY.device; setBase(next); break; }
+      // Noen lagret samtidig, prøv på nytt
+    }
+    SY.last = Date.now(); syncState.error = ''; saveSY();
+    if (manual) toast('Synkronisert');
+  } catch (e) {
+    syncState.error = e.message;
+    if (manual) toast(e.message);
+  } finally {
+    syncState.busy = false; refreshSyncCard();
+  }
+}
+
+// Lagrer lokalt uten å starte en ny synkronisering
+function persistLocal() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignorer */ } }
+
+const randomCode = () => Array.from(crypto.getRandomValues(new Uint8Array(18)), b => b.toString(16).padStart(2, '0')).join('');
+const encodeSetup = cfg => 'MATPLAN-' + btoa(unescape(encodeURIComponent(JSON.stringify({ u: cfg.url, k: cfg.key, c: cfg.code }))));
+function decodeSetup(txt) {
+  const m = String(txt).trim().match(/MATPLAN-([A-Za-z0-9+/=]+)/);
+  if (!m) return null;
+  try { const o = JSON.parse(decodeURIComponent(escape(atob(m[1])))); return o.u && o.k && o.c ? { url: o.u, key: o.k, code: o.c } : null; } catch (e) { return null; }
+}
+
+function syncCardHtml() {
+  const timeStr = ts => new Date(ts).toLocaleString('nb-NO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  if (SY) {
+    return `<section class="card" id="sync-card"><h2>Synkronisering<span>${syncState.busy ? 'synkroniserer …' : 'på'}</span></h2>
+      <div class="row"><div class="grow sub">
+        ${syncState.error ? `<p style="margin:0 0 6px;color:var(--danger)">${esc(syncState.error)}</p>` : ''}
+        <p style="margin:0">Denne telefonen: <b>${esc(SY.device || 'Ukjent telefon')}</b>${SY.last ? `<br>Sist synkronisert ${timeStr(SY.last)}${SY.lastBy && SY.lastBy !== SY.device ? ` · siste endring fra ${esc(SY.lastBy)}` : ''}` : ''}</p>
+      </div></div>
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn primary" id="sync-now">Synkroniser nå</button>
+        <button class="btn" id="sync-share">Del oppsett med husstanden</button>
+        <button class="btn small danger" id="sync-off" style="margin-left:auto">Slå av</button>
+      </div>
+    </section>`;
+  }
+  return `<section class="card" id="sync-card"><h2>Synkronisering<span>av</span></h2>
+    <div class="row"><div class="grow sub">
+      <p style="margin:0 0 8px">Del plan, middagstips, lager og handleliste mellom telefonene i husstanden. Dette krever en gratis konto hos Supabase, og passer for deg som er litt teknisk.</p>
+      <p style="margin:0"><b>Har noen i husstanden allerede satt det opp?</b> Be om oppsettkoden og lim den inn her.</p>
+    </div></div>
+    <div class="row" style="flex-wrap:wrap">
+      <button class="btn primary" id="sync-join">Lim inn oppsettkode</button>
+      <button class="btn" id="sync-setup">Sett opp ny</button>
+    </div>
+    <details class="row" style="display:block">
+      <summary style="cursor:pointer;font-weight:600">Slik setter du opp Supabase</summary>
+      <ol class="sub" style="margin:8px 0 0;padding-left:20px;display:grid;gap:6px">
+        <li>Lag en gratis konto på <b>supabase.com</b> og trykk <b>New project</b>. Velg et navn og et passord, og region <b>Europe</b>.</li>
+        <li>Når prosjektet er klart: åpne <b>SQL Editor</b> i menyen, lim inn SQL-koden under og trykk <b>Run</b>.</li>
+        <li>Gå til <b>Project Settings → API Keys</b> (eller <b>Data API</b>). Kopier <b>Project URL</b> og nøkkelen som heter <b>publishable</b> (eller <b>anon</b>). Bruk aldri <b>secret</b>- eller <b>service_role</b>-nøkkelen.</li>
+        <li>Trykk <b>Sett opp ny</b> over, og lim inn adressen og nøkkelen.</li>
+        <li>Trykk <b>Del oppsett med husstanden</b> og send koden til de andre. De limer den inn i sin app.</li>
+      </ol>
+      <button class="btn small" id="sync-sql" style="margin-top:10px">Vis SQL-koden</button>
+    </details>
+  </section>`;
+}
+function refreshSyncCard() {
+  const card = document.getElementById('sync-card');
+  if (!card) return;
+  card.outerHTML = syncCardHtml();
+  bindSyncCard();
+}
+function bindSyncCard() {
+  const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  on('sync-now', () => syncNow(true));
+  on('sync-share', () => {
+    const code = encodeSetup(SY);
+    const text = `Oppsettkode for Matplanlegging (lim inn under Mer → Synkronisering):\n\n${code}`;
+    if (navigator.share) navigator.share({ title: 'Matplanlegging – synkronisering', text }).catch(() => {});
+    else showText('Oppsettkode', code);
+  });
+  on('sync-off', async () => {
+    if (!await ask('Slå av synkronisering på denne telefonen? Dataene blir liggende her, men endringer deles ikke lenger.', 'Slå av', true)) return;
+    SY = null; saveSY(); try { localStorage.removeItem(BASE_KEY); } catch (e) { /* ignorer */ }
+    refreshSyncCard(); toast('Synkronisering er slått av');
+  });
+  on('sync-sql', () => showText('SQL-kode til Supabase', SYNC_SQL));
+  on('sync-setup', () => openSyncDialog('setup'));
+  on('sync-join', () => openSyncDialog('join'));
+}
+
+function openSyncDialog(mode) {
+  const dlg = $('#dlg');
+  dlg.onclose = null;
+  dlg.innerHTML = `<form id="sf">
+    <div class="dlg-head"><h3>${mode === 'setup' ? 'Sett opp synkronisering' : 'Bli med i husstanden'}</h3><button type="button" class="x" id="close" aria-label="Lukk">×</button></div>
+    <div class="dlg-body">
+      ${mode === 'setup' ? `
+        <label class="f">Project URL<input type="url" id="s-url" placeholder="https://abcdefgh.supabase.co" required autocomplete="off"></label>
+        <label class="f">Publishable- eller anon-nøkkel<input type="text" id="s-key" placeholder="sb_publishable_… eller eyJ…" required autocomplete="off"></label>
+      ` : `
+        <label class="f">Oppsettkode<textarea id="s-code" rows="4" placeholder="MATPLAN-…" required style="border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--card);color:var(--ink);font:13px/1.4 ui-monospace,Menlo,monospace"></textarea></label>
+      `}
+      <label class="f">Navn på denne telefonen<input type="text" id="s-dev" placeholder="F.eks. Silje" required autocomplete="off"></label>
+      <p class="sub" id="s-err" style="margin:0;color:var(--danger)"></p>
+    </div>
+    <div class="dlg-foot"><button type="button" class="btn" id="cancel">Avbryt</button><button type="submit" class="btn primary" id="s-ok">Koble til</button></div>
+  </form>`;
+  const close = () => dlg.close();
+  $('#close').onclick = close; $('#cancel').onclick = close;
+  $('#sf').onsubmit = async ev => {
+    ev.preventDefault();
+    const err = msg => { $('#s-err').textContent = msg; $('#s-ok').disabled = false; };
+    $('#s-ok').disabled = true; $('#s-err').textContent = 'Kobler til …';
+    let cfg;
+    if (mode === 'setup') {
+      const url = $('#s-url').value.trim(), key = $('#s-key').value.trim();
+      if (!/^https:\/\/.+/.test(url)) return err('Adressen må starte med https://');
+      if (/^sb_secret_/.test(key) || /service_role/.test(atobSafe(key.split('.')[1] || ''))) return err('Dette er en hemmelig nøkkel. Bruk publishable- eller anon-nøkkelen.');
+      cfg = { url, key, code: randomCode() };
+    } else {
+      cfg = decodeSetup($('#s-code').value);
+      if (!cfg) return err('Koden ble ikke gjenkjent. Den skal starte med MATPLAN-.');
+    }
+    cfg.device = $('#s-dev').value.trim() || 'Ukjent telefon';
+    let remote;
+    try { remote = ((await rpc('matplan_get', { p_id: cfg.code }, cfg)) || [])[0]; }
+    catch (e) { return err(e.message); }
+    let replace = true;
+    if (remote) {
+      const hasLocal = S.items.length || S.dinners.length;
+      if (hasLocal) {
+        dlg.close();
+        replace = await ask(`Husstanden har allerede ${normState(remote.data).dinners.length} middagstips og ${normState(remote.data).items.length} varer. Vil du bytte ut det som ligger på denne telefonen med husstandens data?\n\nVelger du Avbryt, slås dataene sammen i stedet.`, 'Bytt ut');
+      }
+      if (replace) { S = normState(remote.data); setBase(S); cfg.version = remote.version; }
+      else { setBase(emptyState()); cfg.version = 0; }
+      persistLocal();
+    } else {
+      setBase(emptyState()); cfg.version = 0;
+    }
+    SY = cfg; saveSY();
+    if (dlg.open) dlg.close();
+    await syncNow();
+    render();
+    toast(syncState.error ? syncState.error : 'Synkronisering er slått på');
+  };
+  dlg.showModal();
+}
+function atobSafe(s) { try { return atob(s.replace(/-/g, '+').replace(/_/g, '/')); } catch (e) { return ''; } }
+
+// Synkroniser når appen åpnes, kommer tilbake i forgrunnen, eller får nett igjen
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') scheduleSync(300); });
+window.addEventListener('online', () => scheduleSync(300));
+setInterval(() => { if (document.visibilityState === 'visible') scheduleSync(0); }, 60000);
+
 render();
+scheduleSync(500);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
 </script>
 </body>
