@@ -1,5 +1,5 @@
-const CACHE = 'matlager-v5';
-const APP_SHELL = ['./', './index.html', './manifest.json', './icon.svg'];
+const CACHE = 'matlager-v6';
+const APP_SHELL = ['./', './index.html', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(APP_SHELL)).then(() => self.skipWaiting()));
