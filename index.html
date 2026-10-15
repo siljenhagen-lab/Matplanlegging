@@ -125,7 +125,6 @@ label.f{display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:600}
 .ing .ing-cat{grid-column:1 / -1}
 .ing input,.ing select{padding:8px}
 .steps{display:flex;gap:6px;margin:0 0 10px;flex-wrap:wrap}
-.steps .chip b{font-variant-numeric:tabular-nums;margin-right:4px}
 @media (max-width:380px){.round{width:38px;height:38px}.qty{min-width:48px}}
 </style>
 </head>
@@ -189,10 +188,10 @@ function load() {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const d = JSON.parse(raw);
-      return { items: d.items || [], log: d.log || [], draft: d.draft || {}, dinners: d.dinners || [], plan: d.plan || {} };
+      return { items: d.items || [], log: d.log || [], draft: d.draft || {}, dinners: d.dinners || [], plan: d.plan || {}, extras: d.extras || [], settings: d.settings || {} };
     }
   } catch (e) { /* tom start */ }
-  return { items: [], log: [], draft: {}, dinners: [], plan: {} };
+  return { items: [], log: [], draft: {}, dinners: [], plan: {}, extras: [], settings: {} };
 }
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
@@ -589,9 +588,9 @@ function viewPlan() {
       <button class="btn small" id="nextm" aria-label="Neste måned">›</button>
     </div>
     <div class="steps">
-      <button class="chip ${planMode === 'borte' ? 'on' : ''}" data-mode="borte"><b>1</b>Merk bortedager</button>
-      <button class="chip ${planMode === 'middag' ? 'on' : ''}" data-mode="middag"><b>2</b>Velg middager</button>
-      <button class="chip" id="to-list"><b>3</b>Handleliste →</button>
+      <button class="chip ${planMode === 'borte' ? 'on' : ''}" data-mode="borte">Merk bortedager</button>
+      <button class="chip ${planMode === 'middag' ? 'on' : ''}" data-mode="middag">Velg middager</button>
+      <button class="chip" id="to-list">Handleliste →</button>
     </div>
     <p class="hint">${planMode === 'borte'
       ? 'Trykk på dagene dere er borte. Trykk igjen for å angre.'
@@ -809,19 +808,14 @@ function suggestions() {
 function viewListe() {
   const { mnd, behov, month } = suggestions();
   $('#title').textContent = 'Handleliste';
-  $('#subtitle').textContent = `Månedshandel for ${monthName(planMonth)}`;
-
-  if (!S.items.length) {
-    $('#view').innerHTML = `<div class="card empty-state">Legg inn middager under <b>Middager</b> eller varer under <b>Lager</b>, så lager appen handlelisten for deg.</div>`;
-    return;
-  }
+  $('#subtitle').textContent = `For ${monthName(planMonth)}`;
 
   const draft = r => S.draft[r.i.id] || { on: false, amt: r.amt };
   const grouped = (rows, rowFn) => CATS.map(c => ({ c, rows: rows.filter(r => r.i.cat === c.id).sort((a, b) => byName(a.i, b.i)) }))
     .filter(g => g.rows.length).map(g => `<div class="grp">${g.c.name}</div>` + g.rows.map(rowFn).join('')).join('');
   const steps = `<div class="steps">
-      <button class="chip ${listMode === 'sjekk' ? 'on' : ''}" data-lm="sjekk"><b>4</b>Sjekk skapene</button>
-      <button class="chip ${listMode === 'handle' ? 'on' : ''}" data-lm="handle"><b>5</b>Handleliste</button>
+      <button class="chip ${listMode === 'sjekk' ? 'on' : ''}" data-lm="sjekk">Sjekk skapene</button>
+      <button class="chip ${listMode === 'handle' ? 'on' : ''}" data-lm="handle">Handleliste</button>
     </div>`;
   const planDays = Object.values(S.plan[planMonth] || {}).filter(d => d.dinner && !d.away && !d.cooked).length;
   const planNote = planDays
@@ -852,60 +846,109 @@ function viewListe() {
     return;
   }
 
-  const section = (title, rows, note) => {
-    if (!rows.length) return `<section class="card"><h2>${title}</h2><div class="row sub">${note}</div></section>`;
-    return `<section class="card"><h2>${title}<span>${rows.length}</span></h2>` + grouped(rows, r => {
-      const d = draft(r);
-      return `<div class="row ${d.on ? 'done' : ''}">
-        <input type="checkbox" class="check" data-chk="${r.i.id}" ${d.on ? 'checked' : ''} aria-label="Lagt i kurven">
-        <div class="grow"><span class="name" style="cursor:default">${esc(r.i.name)}</span><div class="sub">${r.why}</div></div>
-        <input type="number" class="list-amt" inputmode="decimal" min="0" step="any" data-amt="${r.i.id}" value="${d.amt}" aria-label="Antall">
-        <span class="sub" style="width:42px">${esc(r.i.unit)}</span>
-      </div>`;
-    }) + `</section>`;
+  // Én felles radmodell for forslag og egne tillegg
+  const toRow = r => ({ key: r.i.id, itemId: r.i.id, name: r.i.name, unit: r.i.unit, cat: r.i.cat, why: r.why, amt: r.amt });
+  const extraRows = S.extras.map(x => {
+    const it = x.item && item(x.item);
+    return { key: 'x:' + x.id, extraId: x.id, itemId: it ? it.id : null, name: it ? it.name : x.name, unit: it ? it.unit : x.unit, cat: it ? it.cat : 'annet', why: 'lagt til selv', amt: x.amt };
+  });
+  const mndRows = mnd.map(toRow), behovRows = behov.map(toRow);
+  const all = [...mndRows, ...behovRows, ...extraRows];
+  const view = S.settings.listView || 'oppdelt';
+  const draftOf = r => S.draft[r.key] || { on: false, amt: r.amt };
+  const byCat = rows => CATS.map(c => ({ c, rows: rows.filter(r => r.cat === c.id).sort((a, b) => a.name.localeCompare(b.name, 'nb')) })).filter(g => g.rows.length);
+  const rowHtml = r => {
+    const d = draftOf(r);
+    return `<div class="row ${d.on ? 'done' : ''}">
+      <input type="checkbox" class="check" data-chk="${esc(r.key)}" ${d.on ? 'checked' : ''} aria-label="Lagt i kurven">
+      <div class="grow"><span class="name" style="cursor:default">${esc(r.name)}</span><div class="sub">${esc(r.why)}</div></div>
+      <input type="number" class="list-amt" inputmode="decimal" min="0" step="any" data-amt="${esc(r.key)}" value="${d.amt}" aria-label="Antall">
+      <span class="sub" style="width:42px">${esc(r.unit)}</span>
+      ${r.extraId ? `<button class="x" data-rmx="${r.extraId}" aria-label="Fjern fra listen">×</button>` : ''}
+    </div>`;
   };
+  const section = (title, rows, note) => rows.length
+    ? `<section class="card"><h2>${title}<span>${rows.length}</span></h2>` + byCat(rows).map(g => `<div class="grp">${g.c.name}</div>` + g.rows.map(rowHtml).join('')).join('') + `</section>`
+    : note ? `<section class="card"><h2>${title}</h2><div class="row sub">${note}</div></section>` : '';
+  const lists = view === 'enkelt'
+    ? section('Handleliste', all, 'Ingenting på listen ennå. Legg til varer under.')
+    : section('Månedshandel', mndRows, 'Du har nok av alt du månedshandler.')
+      + section('Fylles på ved behov', behovRows, 'Ingen meieri, frukt eller grønt trengs den neste uken.')
+      + section('Lagt til selv', extraRows, '');
 
-  const all = [...mnd, ...behov];
-  const checked = all.filter(r => S.draft[r.i.id]?.on).length;
+  const checked = all.filter(r => S.draft[r.key]?.on).length;
   $('#view').innerHTML = `${steps}
+    <div class="seg" style="margin:0 0 12px" role="group" aria-label="Visning">
+      <button type="button" data-view="oppdelt" class="${view === 'oppdelt' ? 'on' : ''}">Oppdelt liste</button>
+      <button type="button" data-view="enkelt" class="${view === 'enkelt' ? 'on' : ''}">Enkeltliste</button>
+    </div>
     <p class="hint">${planNote} Kryss av det du legger i kurven, og trykk <b>Registrer innkjøp</b> når du er hjemme.</p>
     <div class="toolbar">
       <button class="btn" id="share" ${all.length ? '' : 'disabled'}>Del / kopier liste</button>
       <button class="btn primary" id="register" ${checked ? '' : 'disabled'}>Registrer innkjøp (${checked})</button>
     </div>
-    ${section('Månedshandel', mnd, 'Du har nok av alt du månedshandler.')}
-    ${section('Fylles på ved behov', behov, 'Ingen meieri, frukt eller grønt trengs den neste uken.')}
+    ${lists}
+    <section class="card"><h2>Legg til på listen</h2>
+      <form id="xform" class="row" style="flex-wrap:wrap">
+        <input type="text" id="x-name" list="x-items" placeholder="F.eks. bursdagskake, batterier" autocomplete="off" style="flex:1 1 160px" aria-label="Vare">
+        <input type="number" id="x-amt" inputmode="decimal" min="0" step="any" value="1" style="width:64px;flex:none" aria-label="Antall">
+        <select id="x-unit" style="width:84px;flex:none" aria-label="Enhet">${UNITS.map(u => `<option>${u}</option>`).join('')}</select>
+        <button class="btn primary" type="submit">Legg til</button>
+        <datalist id="x-items">${S.items.slice().sort(byName).map(i => `<option value="${esc(i.name)}">`).join('')}</datalist>
+      </form>
+      <div class="row sub" style="border-top:0;padding-top:0">Varer som finnes på lageret, legges inn på lageret når du registrerer innkjøpet.</div>
+    </section>
   `;
 
-  const byId = Object.fromEntries(all.map(r => [r.i.id, r]));
-  const setDraft = (id, patch) => { S.draft[id] = { ...draft(byId[id]), ...patch }; save(); };
+  const byKey = Object.fromEntries(all.map(r => [r.key, r]));
+  const setDraft = (key, patch) => { S.draft[key] = { ...draftOf(byKey[key]), ...patch }; save(); };
   document.querySelectorAll('[data-lm]').forEach(b => b.onclick = () => { listMode = b.dataset.lm; render(); });
+  document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { S.settings.listView = b.dataset.view; save(); render(); });
   document.querySelectorAll('[data-chk]').forEach(c => c.onchange = () => { setDraft(c.dataset.chk, { on: c.checked }); render(); });
   document.querySelectorAll('[data-amt]').forEach(inp => inp.onchange = () => setDraft(inp.dataset.amt, { amt: Math.max(0, parseFloat(inp.value) || 0) }));
+  document.querySelectorAll('[data-rmx]').forEach(b => b.onclick = () => {
+    S.extras = S.extras.filter(x => x.id !== b.dataset.rmx);
+    delete S.draft['x:' + b.dataset.rmx];
+    save(); render();
+  });
+  const matchItem = name => S.items.find(i => i.name.toLowerCase() === name.trim().toLowerCase());
+  $('#x-name').onchange = () => { const it = matchItem($('#x-name').value); if (it) { const u = $('#x-unit'); if (![...u.options].some(o => o.value === it.unit)) u.add(new Option(it.unit)); u.value = it.unit; } };
+  $('#xform').onsubmit = ev => {
+    ev.preventDefault();
+    const name = $('#x-name').value.trim();
+    if (!name) return;
+    const it = matchItem(name);
+    S.extras.push({ id: uid(), name, amt: Math.max(0, parseFloat($('#x-amt').value) || 1), unit: it ? it.unit : $('#x-unit').value, item: it ? it.id : null });
+    save(); render();
+    toast(`${name} er lagt til på listen`);
+    $('#x-name').focus();
+  };
 
   $('#register').onclick = () => {
     let n = 0;
     for (const r of all) {
-      const d = S.draft[r.i.id];
-      if (d?.on && d.amt > 0) { change(r.i.id, 'kjøp', d.amt, true); n++; }
+      const d = S.draft[r.key];
+      if (!d?.on) continue;
+      if (r.itemId && d.amt > 0) change(r.itemId, 'kjøp', d.amt, true);
+      if (r.extraId) S.extras = S.extras.filter(x => x.id !== r.extraId);
+      n++;
     }
-    for (const r of all) delete S.draft[r.i.id];
+    for (const r of all) delete S.draft[r.key];
     save(); render();
-    toast(`${n} ${n === 1 ? 'vare' : 'varer'} lagt inn på lager`);
+    toast(`${n} ${n === 1 ? 'vare' : 'varer'} registrert som kjøpt`);
   };
   $('#share').onclick = async () => {
     const lines = [`Handleliste – ${monthName(planMonth)}`];
     const add = (title, rows) => {
       if (!rows.length) return;
-      lines.push('', '== ' + title.toUpperCase() + ' ==');
-      for (const c of CATS) {
-        const g = rows.filter(r => r.i.cat === c.id).sort((a, b) => byName(a.i, b.i));
-        if (!g.length) continue;
-        lines.push('', c.name + ':');
-        g.forEach(r => lines.push(`☐ ${r.i.name} – ${fmt(draft(r).amt)} ${r.i.unit}`));
+      if (title) lines.push('', '== ' + title.toUpperCase() + ' ==');
+      for (const g of byCat(rows)) {
+        lines.push('', g.c.name + ':');
+        g.rows.forEach(r => lines.push(`☐ ${r.name} – ${fmt(draftOf(r).amt)} ${r.unit}`));
       }
     };
-    add('Månedshandel', mnd); add('Ved behov', behov);
+    if (view === 'enkelt') add('', all);
+    else { add('Månedshandel', mndRows); add('Ved behov', behovRows); add('Lagt til selv', extraRows); }
     const text = lines.join('\n');
     if (navigator.share) {
       try { await navigator.share({ title: 'Handleliste', text }); return; }
@@ -970,13 +1013,14 @@ function viewMer() {
       <div class="row"><div class="grow sub">Hva som ble kjøpt og brukt, måned for måned.</div>
       <button class="btn" id="to-hist">Se historikk</button></div>
     </section>
-    <section class="card"><h2>Slik planlegger du en måned</h2>
+    <section class="card"><h2>Slik kan du bruke appen</h2>
       <div class="row"><div class="sub">
-        <p style="margin:0 0 8px"><b>1. Plan:</b> Velg måned og merk dagene dere er borte.</p>
-        <p style="margin:0 0 8px"><b>2. Plan:</b> Velg middag for dagene dere er hjemme. Middagene og ingrediensene deres legger du inn under <b>Middager</b>.</p>
-        <p style="margin:0 0 8px"><b>3. Handleliste:</b> Appen regner ut hva middagene trenger, og legger til det du pleier å ha på lager (kaffe, toalettpapir og lignende).</p>
-        <p style="margin:0 0 8px"><b>4. Sjekk skapene:</b> Gå gjennom varene på listen og rett opp antallet hvis lageret ikke stemmer. Listen oppdateres med en gang.</p>
-        <p style="margin:0"><b>5. Handle:</b> Kryss av i butikken og trykk <b>Registrer innkjøp</b>. Når en middag er laget, trykker du på dagen i kalenderen og velger <b>Middagen er laget</b>, så trekkes ingrediensene fra lageret.</p>
+        <p style="margin:0 0 8px">Gjør stegene i den rekkefølgen som passer deg.</p>
+        <p style="margin:0 0 8px"><b>Plan:</b> Merk dagene dere er borte, og velg middag for dagene dere er hjemme.</p>
+        <p style="margin:0 0 8px"><b>Middager:</b> De vanlige middagene og ingrediensene de trenger.</p>
+        <p style="margin:0 0 8px"><b>Handleliste:</b> Appen regner ut hva middagene trenger, og legger til det du pleier å ha på lager. Du kan legge til andre ting selv, og velge mellom oppdelt liste og enkeltliste.</p>
+        <p style="margin:0 0 8px"><b>Sjekk skapene:</b> Rett opp antallet hvis lageret ikke stemmer. Listen oppdateres med en gang.</p>
+        <p style="margin:0"><b>Handle:</b> Kryss av i butikken og trykk <b>Registrer innkjøp</b>. Når en middag er laget, trykker du på dagen i kalenderen og velger <b>Middagen er laget</b>, så trekkes ingrediensene fra lageret.</p>
         <p style="margin:8px 0 0">Meieri, frukt og grønt er satt til «ved behov». De kommer på listen når de er under ønsket mengde, eller når middagene den neste uken trenger dem.</p>
       </div></div>
     </section>
@@ -1010,13 +1054,13 @@ function viewMer() {
       const d = JSON.parse(await file.text());
       if (!Array.isArray(d.items) || !Array.isArray(d.log)) throw new Error('format');
       if (!await ask(`Erstatte dagens data med kopien (${d.items.length} varer)?`, 'Erstatt', true)) return;
-      S = { items: d.items, log: d.log, draft: d.draft || {}, dinners: d.dinners || [], plan: d.plan || {} };
+      S = { items: d.items, log: d.log, draft: d.draft || {}, dinners: d.dinners || [], plan: d.plan || {}, extras: d.extras || [], settings: d.settings || {} };
       save(); toast('Kopien er hentet inn'); go('plan');
     } catch (e) { toast('Filen kunne ikke leses som en Matplanlegging-kopi.'); }
   };
   $('#wipe').onclick = async () => {
     if (!await ask('Slette alle varer og all historikk? Dette kan ikke angres.', 'Slett alt', true)) return;
-    S = { items: [], log: [], draft: {}, dinners: [], plan: {} }; save(); render();
+    S = { items: [], log: [], draft: {}, dinners: [], plan: {}, extras: [], settings: {} }; save(); render();
   };
 }
 
