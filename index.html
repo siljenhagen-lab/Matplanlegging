@@ -121,6 +121,7 @@ label.f{display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:600}
 .day.past:not(.has){opacity:.55}
 .day.cooked b{color:var(--accent)}
 .pick{display:flex;flex-wrap:wrap;gap:6px}
+.sub b.hit{color:var(--accent)}
 .ing{display:grid;grid-template-columns:minmax(0,1fr) 64px 84px 32px;gap:6px;align-items:center}
 .ing .ing-cat{grid-column:1 / -1}
 .ing input,.ing select{padding:8px}
@@ -137,7 +138,7 @@ label.f{display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:600}
 
 <nav>
   <button data-tab="plan" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Plan</button>
-  <button data-tab="middager"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7"/><path d="M12 9v4M2 4v6a2 2 0 0 0 2 2M4 4v16M22 4c-1.5 0-2.5 2-2.5 5s1 4 2.5 4v7"/></svg>Middager</button>
+  <button data-tab="middager"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7"/><path d="M12 9v4M2 4v6a2 2 0 0 0 2 2M4 4v16M22 4c-1.5 0-2.5 2-2.5 5s1 4 2.5 4v7"/></svg>Middagstips</button>
   <button data-tab="liste"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>Handleliste</button>
   <button data-tab="lager"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7M8 3h8l1 4H7z"/></svg>Lager</button>
   <button data-tab="mer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>Mer</button>
@@ -594,7 +595,7 @@ function viewPlan() {
     </div>
     <p class="hint">${planMode === 'borte'
       ? 'Trykk på dagene dere er borte. Trykk igjen for å angre.'
-      : S.dinners.length ? 'Trykk på en dag for å velge middag.' : 'Legg først inn middagene dere pleier å lage under <b>Middager</b>. Du kan også skrive fritt på en dag.'}</p>
+      : S.dinners.length ? 'Trykk på en dag for å velge middag.' : 'Legg først inn middagstips under <b>Middagstips</b>. Du kan også skrive fritt på en dag.'}</p>
     ${cal}
     <section class="card"><h2>Middager i ${monthName(key).split(' ')[0]}<span>${open > 0 ? open + ' dager uten middag' : ''}</span></h2>
       ${summary || '<div class="row sub">Ingen middager valgt ennå.</div>'}
@@ -631,8 +632,9 @@ function openDay(d) {
         <button type="button" data-away="1" class="${day.away ? 'on' : ''}">Borte</button>
       </div>
       ${day.away ? '' : `
+      ${S.dinners.length > 6 ? '<input type="search" id="pick-q" placeholder="Søk i navn eller ingrediens" autocomplete="off" aria-label="Søk i middagstips">' : ''}
       <div class="pick">${S.dinners.slice().sort(byName).map(x => `<button type="button" class="chip ${x.id === day.dinner ? 'on' : ''}" data-dn="${x.id}">${esc(x.name)}</button>`).join('')
-        || '<span class="sub">Ingen middager lagt inn ennå.</span>'}</div>
+        || '<span class="sub">Ingen middagstips lagt inn ennå.</span>'}</div>
       <label class="f">Eller skriv noe annet (rester, ute, …)<input type="text" id="note" value="${esc(day.note || '')}" autocomplete="off"></label>
       ${dn ? `<div class="sub">Ingredienser: ${dn.ings.map(g => { const it = item(g.item); return it ? `${esc(it.name)} ${fmt(g.amt)} ${esc(it.unit)}` : ''; }).filter(Boolean).join(', ') || 'ingen lagt inn'}</div>` : ''}`}`}
     </div>
@@ -646,6 +648,8 @@ function openDay(d) {
   $('#close').onclick = close; $('#done').onclick = close;
   dlg.querySelectorAll('[data-away]').forEach(b => b.onclick = () => { setDay(key, d, { away: b.dataset.away === '1' }); openDay(d); });
   dlg.querySelectorAll('[data-dn]').forEach(b => b.onclick = () => { setDay(key, d, { dinner: b.dataset.dn, note: '' }); close(); });
+  const pq = $('#pick-q');
+  if (pq) pq.oninput = () => dlg.querySelectorAll('[data-dn]').forEach(b => { b.hidden = !dinnerMatches(dinner(b.dataset.dn), pq.value); });
   const note = $('#note');
   if (note) note.onchange = () => { setDay(key, d, { note: note.value.trim(), dinner: note.value.trim() ? '' : day.dinner }); };
   if ($('#clear')) $('#clear').onclick = () => { setDay(key, d, { dinner: '', note: '' }); close(); };
@@ -665,23 +669,41 @@ function openDay(d) {
   dlg.showModal();
 }
 
-/* ---------- Middager ---------- */
+/* ---------- Middagstips ---------- */
+let dinnerQ = '';
+const norm = s => s.toLowerCase().trim();
+// Alle søkeordene må finnes i navnet eller i en av ingrediensene
+function dinnerMatches(dn, q) {
+  const terms = norm(q).split(/\s+/).filter(Boolean);
+  if (!terms.length) return true;
+  const ingNames = dn.ings.map(g => item(g.item)).filter(Boolean).map(it => norm(it.name));
+  return terms.every(t => norm(dn.name).includes(t) || ingNames.some(n => n.includes(t)));
+}
+function ingText(dn, q, sep) {
+  const terms = norm(q).split(/\s+/).filter(Boolean);
+  return dn.ings.map(g => {
+    const it = item(g.item);
+    if (!it) return '';
+    const txt = `${esc(it.name)} ${fmt(g.amt)} ${esc(it.unit)}`;
+    return terms.some(t => norm(it.name).includes(t)) ? `<b class="hit">${txt}</b>` : txt;
+  }).filter(Boolean).join(sep);
+}
 function viewMiddager() {
-  $('#title').textContent = 'Middager';
-  $('#subtitle').textContent = 'Vanlige middager og hva de trenger';
+  $('#title').textContent = 'Middagstips';
+  $('#subtitle').textContent = 'Middager dere liker, og hva de trenger';
   if (!S.dinners.length) {
     $('#view').innerHTML = `
       <div class="card empty-state">
-        <p><b>Ingen middager ennå.</b><br>Legg inn middagene dere pleier å lage, med ingrediensene de trenger. Da kan appen regne ut handlelisten fra middagsplanen.</p>
-        <button class="btn primary" id="seed">Start med vanlige middager</button><br>
-        <button class="btn" id="add-first">Legg inn egen middag</button>
+        <p><b>Ingen middagstips ennå.</b><br>Legg inn middagene dere liker, med ingrediensene de trenger. Da kan appen regne ut handlelisten fra middagsplanen.</p>
+        <button class="btn primary" id="seed">Start med noen eksempler</button><br>
+        <button class="btn" id="add-first">Legg inn eget middagstips</button>
       </div>`;
     $('#seed').onclick = () => {
       for (const [name, ings] of STARTER_DINNERS) {
         S.dinners.push({ id: uid(), name, ings: ings.map(([n, c, u, amt]) => ({ item: findOrCreateItem(n, c, u).id, amt })) });
       }
       save(); render();
-      toast('Middager lagt til. Trykk på en for å endre den.');
+      toast('Middagstips lagt til. Trykk på et for å endre det.');
     };
     $('#add-first').onclick = () => openDinner();
     return;
@@ -689,16 +711,25 @@ function viewMiddager() {
   const used = {};
   for (const d of Object.values(S.plan[planMonth] || {})) if (d.dinner && !d.away) used[d.dinner] = (used[d.dinner] || 0) + 1;
   $('#view').innerHTML = `
-    <div class="toolbar"><button class="btn primary" id="add">+ Ny middag</button></div>
-    <section class="card"><h2>Middager<span>${S.dinners.length}</span></h2>
-    ${S.dinners.slice().sort(byName).map(dn => `<div class="row">
-      <div class="grow">
-        <button class="name" data-dinner="${dn.id}">${esc(dn.name)}${used[dn.id] ? ` <span class="tag">${used[dn.id]}× i ${monthName(planMonth).split(' ')[0]}</span>` : ''}</button>
-        <div class="sub">${dn.ings.map(g => { const it = item(g.item); return it ? `${esc(it.name)} ${fmt(g.amt)} ${esc(it.unit)}` : ''; }).filter(Boolean).join(' · ') || 'Ingen ingredienser'}</div>
-      </div></div>`).join('')}
-    </section>`;
+    <div class="toolbar">
+      <input type="search" id="dq" placeholder="Søk i navn eller ingrediens, f.eks. kylling" value="${esc(dinnerQ)}" autocomplete="off" aria-label="Søk i middagstips">
+      <button class="btn primary" id="add">+ Nytt</button>
+    </div>
+    <div id="dlist"></div>`;
+  const drawList = () => {
+    const list = S.dinners.filter(dn => dinnerMatches(dn, dinnerQ)).sort(byName);
+    $('#dlist').innerHTML = list.length ? `<section class="card"><h2>${dinnerQ.trim() ? 'Treff' : 'Middagstips'}<span>${list.length}${dinnerQ.trim() ? ' av ' + S.dinners.length : ''}</span></h2>
+      ${list.map(dn => `<div class="row">
+        <div class="grow">
+          <button class="name" data-dinner="${dn.id}">${esc(dn.name)}${used[dn.id] ? ` <span class="tag">${used[dn.id]}× i ${monthName(planMonth).split(' ')[0]}</span>` : ''}</button>
+          <div class="sub">${ingText(dn, dinnerQ, ' · ') || 'Ingen ingredienser'}</div>
+        </div></div>`).join('')}
+      </section>` : `<div class="card empty-state">Ingen middagstips med «${esc(dinnerQ.trim())}» i navnet eller ingrediensene.</div>`;
+    document.querySelectorAll('[data-dinner]').forEach(b => b.onclick = () => openDinner(b.dataset.dinner));
+  };
+  drawList();
+  $('#dq').oninput = () => { dinnerQ = $('#dq').value; drawList(); };
   $('#add').onclick = () => openDinner();
-  document.querySelectorAll('[data-dinner]').forEach(b => b.onclick = () => openDinner(b.dataset.dinner));
 }
 
 function openDinner(id) {
@@ -719,7 +750,7 @@ function openDinner(id) {
   };
   dlg.innerHTML = `
     <form id="f">
-      <div class="dlg-head"><h3>${dn ? esc(dn.name) : 'Ny middag'}</h3><button type="button" class="x" id="close" aria-label="Lukk">×</button></div>
+      <div class="dlg-head"><h3>${dn ? esc(dn.name) : 'Nytt middagstips'}</h3><button type="button" class="x" id="close" aria-label="Lukk">×</button></div>
       <div class="dlg-body">
         <label class="f">Navn på middagen<input type="text" id="name" required value="${esc(dn ? dn.name : '')}" autocomplete="off"></label>
         <div class="f" style="display:grid;gap:6px;font-size:13px;color:var(--muted);font-weight:600">Ingredienser (mengde per gang)
@@ -763,7 +794,7 @@ function openDinner(id) {
   const close = () => dlg.close();
   $('#close').onclick = close; $('#cancel').onclick = close;
   if (dn) $('#del').onclick = async () => {
-    if (!await ask(`Slette middagen «${dn.name}»? Den fjernes også fra kalenderen.`, 'Slett', true)) return;
+    if (!await ask(`Slette middagstipset «${dn.name}»? Det fjernes også fra kalenderen.`, 'Slett', true)) return;
     S.dinners = S.dinners.filter(x => x.id !== dn.id);
     for (const m of Object.values(S.plan)) for (const d of Object.values(m)) if (d.dinner === dn.id) delete d.dinner;
     save(); render();
@@ -1007,7 +1038,7 @@ function viewHistorikk() {
 /* ---------- Mer ---------- */
 function viewMer() {
   $('#title').textContent = 'Mer';
-  $('#subtitle').textContent = 'Sikkerhetskopi og innstillinger';
+  $('#subtitle').textContent = 'Historikk, hjelp og eksport';
   $('#view').innerHTML = `
     <section class="card"><h2>Historikk</h2>
       <div class="row"><div class="grow sub">Hva som ble kjøpt og brukt, måned for måned.</div>
@@ -1017,33 +1048,48 @@ function viewMer() {
       <div class="row"><div class="sub">
         <p style="margin:0 0 8px">Gjør stegene i den rekkefølgen som passer deg.</p>
         <p style="margin:0 0 8px"><b>Plan:</b> Merk dagene dere er borte, og velg middag for dagene dere er hjemme.</p>
-        <p style="margin:0 0 8px"><b>Middager:</b> De vanlige middagene og ingrediensene de trenger.</p>
+        <p style="margin:0 0 8px"><b>Middagstips:</b> Middagene dere liker og ingrediensene de trenger. Søk på en ingrediens, for eksempel «kylling», for å finne alle middagene som bruker den.</p>
         <p style="margin:0 0 8px"><b>Handleliste:</b> Appen regner ut hva middagene trenger, og legger til det du pleier å ha på lager. Du kan legge til andre ting selv, og velge mellom oppdelt liste og enkeltliste.</p>
         <p style="margin:0 0 8px"><b>Sjekk skapene:</b> Rett opp antallet hvis lageret ikke stemmer. Listen oppdateres med en gang.</p>
         <p style="margin:0"><b>Handle:</b> Kryss av i butikken og trykk <b>Registrer innkjøp</b>. Når en middag er laget, trykker du på dagen i kalenderen og velger <b>Middagen er laget</b>, så trekkes ingrediensene fra lageret.</p>
         <p style="margin:8px 0 0">Meieri, frukt og grønt er satt til «ved behov». De kommer på listen når de er under ønsket mengde, eller når middagene den neste uken trenger dem.</p>
       </div></div>
     </section>
-    <section class="card"><h2>Sikkerhetskopi</h2>
-      <div class="row"><div class="grow sub">Dataene lagres bare på denne enheten. Ta en kopi av og til, eller for å flytte til en annen telefon.</div></div>
+    <section class="card"><h2>Eksport og import</h2>
+      <div class="row"><div class="grow sub">
+        <p style="margin:0 0 8px">Alt lagres bare på denne telefonen. Slik flytter du det til en ny telefon:</p>
+        <p style="margin:0 0 4px"><b>På den gamle telefonen:</b> trykk <b>Eksporter data</b> og send filen til deg selv, for eksempel på e-post eller til Google Drive.</p>
+        <p style="margin:0"><b>På den nye telefonen:</b> åpne appen, trykk <b>Importer data</b> og velg filen.</p>
+      </div></div>
       <div class="row" style="flex-wrap:wrap">
-        <button class="btn" id="export">Last ned kopi</button>
-        <button class="btn" id="export-text">Vis kopi som tekst</button>
-        <label class="btn" style="cursor:pointer">Hent fra kopi<input type="file" id="import" accept="application/json,.json" hidden></label>
+        <button class="btn primary" id="export">Eksporter data</button>
+        <label class="btn" style="cursor:pointer">Importer data<input type="file" id="import" accept="application/json,.json,text/plain" hidden></label>
+        <button class="btn small" id="export-text" style="margin-left:auto">Vis som tekst</button>
       </div>
+      <div class="row sub">${S.dinners.length} middagstips · ${S.items.length} varer · ${S.log.length} registreringer</div>
     </section>
     <section class="card"><h2>Nullstill</h2>
       <div class="row"><div class="grow sub">Sletter alle varer og all historikk på denne enheten.</div>
       <button class="btn danger" id="wipe">Slett alt</button></div>
     </section>`;
 
-  $('#export').onclick = () => {
-    const blob = new Blob([JSON.stringify({ app: 'matlager', v: 1, ...S }, null, 1)], { type: 'application/json' });
+  $('#export').onclick = async () => {
+    const json = JSON.stringify({ app: 'matlager', v: 1, exported: new Date().toISOString(), ...S }, null, 1);
+    const name = `matplanlegging-${new Date().toISOString().slice(0, 10)}.json`;
+    // Del filen direkte (e-post, Drive, Messenger …) der telefonen støtter det
+    try {
+      const file = new File([json], name, { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Matplanlegging – eksport' });
+        return;
+      }
+    } catch (e) { if (e.name === 'AbortError') return; }
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `matplanlegging-${new Date().toISOString().slice(0, 10)}.json`;
+    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('Filen er lagret i Nedlastinger');
   };
   $('#to-hist').onclick = () => go('historikk');
   $('#export-text').onclick = () => showText('Sikkerhetskopi', JSON.stringify({ app: 'matlager', v: 1, ...S }));
@@ -1053,10 +1099,11 @@ function viewMer() {
     try {
       const d = JSON.parse(await file.text());
       if (!Array.isArray(d.items) || !Array.isArray(d.log)) throw new Error('format');
-      if (!await ask(`Erstatte dagens data med kopien (${d.items.length} varer)?`, 'Erstatt', true)) return;
+      if (!await ask(`Importere ${(d.dinners || []).length} middagstips og ${d.items.length} varer? Det som ligger i appen nå, blir erstattet.`, 'Importer', true)) return;
       S = { items: d.items, log: d.log, draft: d.draft || {}, dinners: d.dinners || [], plan: d.plan || {}, extras: d.extras || [], settings: d.settings || {} };
-      save(); toast('Kopien er hentet inn'); go('plan');
-    } catch (e) { toast('Filen kunne ikke leses som en Matplanlegging-kopi.'); }
+      save(); toast('Dataene er importert'); go('plan');
+    } catch (e) { toast('Filen kunne ikke leses. Velg en fil som er eksportert fra Matplanlegging.'); }
+    ev.target.value = '';
   };
   $('#wipe').onclick = async () => {
     if (!await ask('Slette alle varer og all historikk? Dette kan ikke angres.', 'Slett alt', true)) return;

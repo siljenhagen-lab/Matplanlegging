@@ -1,4 +1,4 @@
-const CACHE = 'matlager-v7';
+const CACHE = 'matlager-v8';
 const APP_SHELL = ['./', './index.html', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
